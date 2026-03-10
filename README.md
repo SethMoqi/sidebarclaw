@@ -1,12 +1,24 @@
+[![Version](https://img.shields.io/badge/version-0.1.0-7dc4ff.svg)](https://github.com/SethMoqi/sidebarclaw/releases)
+[![License](https://img.shields.io/badge/license-MIT-0f172a.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Chromium-38bdf8.svg)](extension/)
+
 # SidebarClaw
 
-SidebarClaw is a ready-to-run Chromium sidebar extension for sending web pages to a local OpenClaw session.
+SidebarClaw is a ready-to-run Chromium sidebar extension for working with web pages inside your own OpenClaw sessions.
 
 It includes:
 
 - a Chromium extension in `extension/`
 - a local adapter gateway in `src/longdoc/gateway.py`
 - an optional local long-document fallback when OpenClaw is unavailable
+
+## Why Use SidebarClaw
+
+- Turn the current page into chat context in one click
+- Send one tab or multiple tabs into the same OpenClaw session
+- Keep gateway credentials isolated from page content
+- Resume usable sessions automatically instead of getting stuck on archived ones
+- Protect your workflow from prompt injection inside untrusted page text
 
 ## What It Does
 
@@ -19,6 +31,14 @@ SidebarClaw lets you:
 - keep API credentials separated from page content and session records
 - archive or auto-close sessions with a structured summary
 - apply prompt-injection protection to untrusted page content
+
+## Highlights
+
+- Chat-first sidebar interface with light and dark themes
+- Multi-tab injection with a current-tab fallback
+- Dynamic session resolution for reopening the sidebar safely
+- Manual refresh and async response polling
+- Separate settings page for gateway and prompt policy
 
 ## Requirements
 
@@ -72,6 +92,15 @@ http://127.0.0.1:8787
 
 If no tab is selected, SidebarClaw automatically falls back to the current active tab.
 
+## Included in Version 0.1.0
+
+- Browser side panel for page-aware OpenClaw chat
+- Configurable OpenClaw gateway, token, model, and agent
+- Session auto-close and structured close summaries
+- Prompt-injection guardrails for untrusted page content
+- URL-only or extracted-content injection modes
+- Packaged extension build script
+
 ## Session Behavior
 
 - SidebarClaw dynamically resolves the latest usable session when the sidebar opens
@@ -106,6 +135,11 @@ dist/sidebarclaw-extension.zip
 - `src/longdoc/` local adapter gateway and fallback logic
 - `scripts/start_gateway.sh` adapter launcher
 - `scripts/package_extension.sh` extension packager
+
+## Release Notes
+
+- [CHANGELOG.md](CHANGELOG.md)
+- [RELEASE_NOTES.md](RELEASE_NOTES.md)
 
 ## Troubleshooting
 
