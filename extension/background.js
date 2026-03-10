@@ -1,9 +1,17 @@
 const DEFAULT_GATEWAY_BASE = "http://127.0.0.1:8787";
+const DEFAULT_PROMPT_SETTINGS = {
+  sessionInjectPrompt: "总结后支持后续检索，并保留最关键的证据段落。",
+  askPrefix: "请基于当前会话里已注入的网页内容回答。",
+  defaultCaptureMode: "full-content",
+};
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const current = await chrome.storage.local.get(["gatewayBase"]);
+  const current = await chrome.storage.local.get(["gatewayBase", "promptSettings"]);
   if (!current.gatewayBase) {
     await chrome.storage.local.set({ gatewayBase: DEFAULT_GATEWAY_BASE });
+  }
+  if (!current.promptSettings) {
+    await chrome.storage.local.set({ promptSettings: DEFAULT_PROMPT_SETTINGS });
   }
 });
 
@@ -33,6 +41,12 @@ async function handleMessage(message) {
       return saveOpenClawSettings(message.payload);
     case "validateOpenClawSettings":
       return validateOpenClawSettings(message.payload);
+    case "getPromptSettings":
+      return getPromptSettings();
+    case "savePromptSettings":
+      return savePromptSettings(message.payload);
+    case "listTabs":
+      return listTabs();
     case "createSession":
       return createSession();
     case "loadSession":
@@ -58,6 +72,25 @@ async function saveGatewaySettings(payload) {
   const gatewayBase = String(payload?.gatewayBase || "").trim() || DEFAULT_GATEWAY_BASE;
   await chrome.storage.local.set({ gatewayBase });
   return { gatewayBase };
+}
+
+async function getPromptSettings() {
+  const stored = await chrome.storage.local.get(["promptSettings"]);
+  return {
+    promptSettings: {
+      ...DEFAULT_PROMPT_SETTINGS,
+      ...(stored.promptSettings || {}),
+    },
+  };
+}
+
+async function savePromptSettings(payload) {
+  const next = {
+    ...DEFAULT_PROMPT_SETTINGS,
+    ...(payload || {}),
+  };
+  await chrome.storage.local.set({ promptSettings: next });
+  return { promptSettings: next };
 }
 
 async function getOpenClawSettings() {
@@ -92,19 +125,28 @@ async function loadSession(sessionId) {
   return loaded;
 }
 
+async function listTabs() {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  return {
+    tabs: tabs
+      .filter((tab) => typeof tab.id === "number" && isInjectableUrl(tab.url))
+      .map((tab) => ({
+        id: tab.id,
+        title: tab.title || tab.url || `Tab ${tab.id}`,
+        url: tab.url || "",
+        active: Boolean(tab.active),
+      })),
+  };
+}
+
 async function injectCurrentPage(payload) {
   const { gatewayBase, sessionId } = await getGatewaySettings();
-  const page = await extractActivePageContext();
+  const pages = await extractSelectedPages(payload);
   const openclaw = normalizeOpenClawPayload(payload.openclaw);
   const response = await postJson(`${gatewayBase}/inputs/inject`, {
     sessionId: payload.sessionId || sessionId || undefined,
     source: "browser_sidebar_extension",
-    page: {
-      ...page,
-      title: payload.title || page.title,
-      url: payload.url || page.url,
-      content: payload.content || page.content,
-    },
+    page: buildCombinedPage(pages, payload.captureMode || "full-content"),
     input: {
       instruction: payload.instruction || "",
     },
@@ -148,14 +190,75 @@ function normalizeOpenClawPayload(openclaw = {}) {
   };
 }
 
-async function extractActivePageContext() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
-    throw new Error("Unable to resolve current tab");
+async function extractSelectedPages(payload) {
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  const activeTab = tabs.find((tab) => tab.active && typeof tab.id === "number");
+  const requestedIds = Array.isArray(payload.tabIds) && payload.tabIds.length
+    ? payload.tabIds.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+    : activeTab?.id
+      ? [activeTab.id]
+      : [];
+  if (!requestedIds.length) {
+    throw new Error("No selectable tab found for injection.");
   }
 
+  const selectedTabs = tabs.filter((tab) => requestedIds.includes(tab.id));
+  const captureMode = payload.captureMode || "full-content";
+  const pages = [];
+  for (const tab of selectedTabs) {
+    if (!tab.id || !isInjectableUrl(tab.url)) {
+      continue;
+    }
+    if (captureMode === "url-reference") {
+      pages.push({
+        title: tab.title || tab.url || `Tab ${tab.id}`,
+        url: tab.url || "",
+        selectedText: "",
+        headings: [],
+        paragraphs: [],
+        content: "",
+        capturedAt: new Date().toISOString(),
+        extractionMode: "url-reference",
+      });
+      continue;
+    }
+    pages.push(await extractTabPageContext(tab.id));
+  }
+  if (!pages.length) {
+    throw new Error("No supported tab content could be extracted.");
+  }
+  return pages;
+}
+
+function buildCombinedPage(pages, captureMode) {
+  const combinedTitle = pages.length === 1 ? pages[0].title : `Workspace (${pages.length} tabs)`;
+  const combinedUrl = pages.length === 1 ? pages[0].url : "multi://browser-tabs";
+  const sections = pages.map((page, index) => {
+    const header = [
+      `Tab ${index + 1}: ${page.title}`,
+      `URL: ${page.url}`,
+    ];
+    if (captureMode === "url-reference") {
+      header.push("Mode: url-reference");
+      return header.join("\n");
+    }
+    const body = page.content || page.paragraphs?.join("\n\n") || "";
+    return [...header, body].filter(Boolean).join("\n");
+  });
+  return {
+    title: combinedTitle,
+    url: combinedUrl,
+    content: sections.join("\n\n---\n\n").slice(0, 120000),
+    headings: pages.flatMap((page) => page.headings || []).slice(0, 60),
+    capturedAt: new Date().toISOString(),
+    extractionMode: captureMode === "url-reference" ? "url-reference" : "paragraphs",
+    tabs: pages.map((page) => ({ title: page.title, url: page.url })),
+  };
+}
+
+async function extractTabPageContext(tabId) {
   const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
+    target: { tabId },
     func: () => {
       const title = document.title || "";
       const url = location.href;
@@ -192,14 +295,23 @@ async function extractActivePageContext() {
   });
 
   if (!result) {
-    throw new Error("Failed to extract current page context");
+    throw new Error(`Failed to extract tab page context: ${tabId}`);
   }
 
   return result;
 }
 
+function isInjectableUrl(url) {
+  return typeof url === "string" && /^(https?:\/\/)/i.test(url);
+}
+
 async function getJson(url) {
-  const response = await fetch(url, { method: "GET" });
+  let response;
+  try {
+    response = await fetch(url, { method: "GET" });
+  } catch (error) {
+    throw new Error(buildFetchFailureMessage("GET", url, error));
+  }
   if (!response.ok) {
     throw new Error(`GET ${url} failed with ${response.status}`);
   }
@@ -207,14 +319,30 @@ async function getJson(url) {
 }
 
 async function postJson(url, body) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw new Error(buildFetchFailureMessage("POST", url, error));
+  }
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`POST ${url} failed with ${response.status}: ${text}`);
   }
   return text ? JSON.parse(text) : {};
+}
+
+function buildFetchFailureMessage(method, url, error) {
+  const target = new URL(url);
+  return [
+    `${method} ${url} failed: ${String(error?.message || error)}`,
+    "",
+    `本地 adapter gateway 不可达：${target.origin}`,
+    "请先启动 longdoc gateway，例如：",
+    "scripts/start_gateway.sh --port 8787 --data-dir .gateway_data",
+  ].join("\n");
 }

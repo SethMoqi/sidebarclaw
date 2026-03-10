@@ -4,37 +4,60 @@ const prompts = [
   { title: "结构化输出", body: "请将这页整理成适合知识库归档的结构化摘要。" },
 ];
 
+const state = {
+  sessionId: "",
+  selectedTabIds: new Set(),
+  availableTabs: [],
+  promptSettings: {
+    sessionInjectPrompt: "",
+    askPrefix: "",
+    defaultCaptureMode: "full-content",
+  },
+  captureMode: "full-content",
+  lastTurnCount: 0,
+  pollTimer: null,
+};
+
+const statusPulse = document.getElementById("statusPulse");
 const connectionStatus = document.getElementById("connectionStatus");
-const connectionSummary = document.getElementById("connectionSummary");
 const sessionLabel = document.getElementById("sessionLabel");
 const sessionMeta = document.getElementById("sessionMeta");
+const tabSummary = document.getElementById("tabSummary");
+const selectedTabsLabel = document.getElementById("selectedTabsLabel");
 const promptList = document.getElementById("promptList");
 const instruction = document.getElementById("instruction");
 const question = document.getElementById("question");
 const messages = document.getElementById("messages");
+const tabList = document.getElementById("tabList");
 
 document.getElementById("newSessionBtn").addEventListener("click", createSession);
 document.getElementById("openSettingsBtn").addEventListener("click", openSettingsPage);
-document.getElementById("openSettingsSecondaryBtn").addEventListener("click", openSettingsPage);
 document.getElementById("refreshStatusBtn").addEventListener("click", bootstrap);
+document.getElementById("refreshTabsBtn").addEventListener("click", loadTabs);
+document.getElementById("selectActiveBtn").addEventListener("click", selectActiveTabOnly);
+document.getElementById("selectAllBtn").addEventListener("click", selectAllTabs);
 document.getElementById("injectPage").addEventListener("click", injectPage);
 document.getElementById("sendQuestion").addEventListener("click", sendQuestion);
+document.getElementById("modeFullContent").addEventListener("click", () => setCaptureMode("full-content"));
+document.getElementById("modeUrlReference").addEventListener("click", () => setCaptureMode("url-reference"));
 
 bootstrap();
 renderPromptList();
 
 async function bootstrap() {
-  await renderConnectionSummary();
+  setStatus("idle", "正在同步状态");
+  await Promise.all([renderConnectionSummary(), loadTabs(), loadPromptSettings()]);
 
   const gateway = await sendRuntimeMessage("getGatewaySettings");
-  if (gateway.sessionId) {
+  state.sessionId = gateway.sessionId || "";
+  if (state.sessionId) {
     try {
-      const loaded = await sendRuntimeMessage("loadSession", { sessionId: gateway.sessionId });
-      renderSession(loaded.session);
-      restoreMessages(loaded.session.turns || []);
+      const loaded = await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
+      applySession(loaded.session);
+      startPolling();
       return;
     } catch (_error) {
-      // Fall through to create a new session.
+      stopPolling();
     }
   }
 
@@ -47,22 +70,71 @@ async function renderConnectionSummary() {
     sendRuntimeMessage("getOpenClawSettings"),
   ]);
   const settings = openclaw.settings || {};
-  const cards = [
-    { label: "Gateway", value: gateway.gatewayBase ? "已配置" : "未配置" },
-    { label: "Model", value: settings.model || "openclaw:main" },
-    { label: "Agent", value: settings.agent || "未指定" },
-    { label: "Auth", value: settings.hasBearerToken ? "Token 已保存" : "未保存 Token" },
-  ];
+  const configured = Boolean(settings.baseUrl);
+  connectionStatus.textContent = configured ? `已连接 ${settings.agent || settings.model || "OpenClaw"}` : "仅本地 fallback";
+  setStatus(configured ? "ok" : "warn", connectionStatus.textContent);
+  sessionMeta.textContent = configured
+    ? `Gateway 已配置 | model: ${settings.model || "openclaw:main"}${settings.agent ? ` | agent: ${settings.agent}` : ""}`
+    : `Gateway 已配置到 ${gateway.gatewayBase}，当前 OpenClaw 未配置`;
+}
 
-  connectionSummary.innerHTML = "";
-  for (const item of cards) {
-    const node = document.createElement("div");
-    node.className = "status-item";
-    node.innerHTML = `<strong>${item.label}</strong><span>${item.value}</span>`;
-    connectionSummary.appendChild(node);
+async function loadPromptSettings() {
+  const result = await sendRuntimeMessage("getPromptSettings");
+  state.promptSettings = {
+    ...state.promptSettings,
+    ...(result.promptSettings || {}),
+  };
+  state.captureMode = state.promptSettings.defaultCaptureMode || "full-content";
+  instruction.value = state.promptSettings.sessionInjectPrompt || "";
+  setCaptureMode(state.captureMode);
+}
+
+async function loadTabs() {
+  const result = await sendRuntimeMessage("listTabs");
+  state.availableTabs = result.tabs || [];
+  tabSummary.textContent = `${state.availableTabs.length} 个标签页`;
+  if (!state.selectedTabIds.size) {
+    for (const tab of state.availableTabs) {
+      if (tab.active) {
+        state.selectedTabIds.add(tab.id);
+      }
+    }
+  } else {
+    const ids = new Set(state.availableTabs.map((tab) => tab.id));
+    state.selectedTabIds = new Set([...state.selectedTabIds].filter((id) => ids.has(id)));
   }
+  renderTabs();
+}
 
-  connectionStatus.textContent = settings.baseUrl ? "已配置 OpenClaw" : "仅本地 fallback";
+function renderTabs() {
+  tabList.innerHTML = "";
+  for (const tab of state.availableTabs) {
+    const label = document.createElement("label");
+    label.className = `tab-item ${state.selectedTabIds.has(tab.id) ? "active" : ""}`;
+    label.innerHTML = `
+      <input type="checkbox" ${state.selectedTabIds.has(tab.id) ? "checked" : ""} />
+      <div>
+        <strong>${escapeHtml(tab.title)}</strong>
+        <span>${escapeHtml(tab.url)}</span>
+      </div>
+    `;
+    label.querySelector("input").addEventListener("change", (event) => {
+      if (event.target.checked) {
+        state.selectedTabIds.add(tab.id);
+      } else {
+        state.selectedTabIds.delete(tab.id);
+      }
+      updateTabSelectionSummary();
+      renderTabs();
+    });
+    tabList.appendChild(label);
+  }
+  updateTabSelectionSummary();
+}
+
+function updateTabSelectionSummary() {
+  const count = state.selectedTabIds.size;
+  selectedTabsLabel.textContent = count ? `已选 ${count} 个标签页` : "未选择";
 }
 
 function renderPromptList() {
@@ -81,20 +153,31 @@ function renderPromptList() {
 
 async function createSession() {
   const created = await sendRuntimeMessage("createSession");
-  renderSession(created.session);
+  state.sessionId = created.session.id;
+  applySession(created.session);
   messages.innerHTML = "";
-  appendMessage("assistant", "已创建新会话。现在可以注入当前页面。");
+  appendMessage("assistant", "已创建新会话。默认注入提示词已就绪，可以直接注入所选标签页。");
+  instruction.value = state.promptSettings.sessionInjectPrompt || "";
+  startPolling();
 }
 
 async function injectPage() {
+  if (!state.selectedTabIds.size) {
+    appendMessage("assistant", "先选择至少一个标签页。");
+    return;
+  }
+  setStatus("busy", "正在注入标签页");
   const result = await sendRuntimeMessage("injectCurrentPage", {
     instruction: instruction.value.trim(),
+    tabIds: [...state.selectedTabIds],
+    captureMode: state.captureMode,
   });
   if (result.sessionId) {
     const loaded = await sendRuntimeMessage("loadSession", { sessionId: result.sessionId });
-    renderSession(loaded.session);
+    applySession(loaded.session);
   }
   appendMessage("assistant", result.output?.text || "注入完成。");
+  setStatus("ok", "注入完成");
 }
 
 async function sendQuestion() {
@@ -104,10 +187,15 @@ async function sendQuestion() {
   }
   appendMessage("user", text);
   question.value = "";
+  setStatus("busy", "等待 OpenClaw 响应");
+  const finalQuestion = state.promptSettings.askPrefix
+    ? `${state.promptSettings.askPrefix}\n\n用户问题：${text}`
+    : text;
   const result = await sendRuntimeMessage("askCurrentSession", {
-    question: text,
+    question: finalQuestion,
   });
   appendMessage("assistant", buildAnswer(result));
+  setStatus("ok", "已收到响应");
 }
 
 function buildAnswer(result) {
@@ -120,22 +208,40 @@ function buildAnswer(result) {
   return JSON.stringify(result, null, 2);
 }
 
-function renderSession(session) {
+function applySession(session) {
+  state.lastTurnCount = session.turns?.length || 0;
   sessionLabel.textContent = session.id;
-  const count = session.turns?.length || 0;
   const openclaw = session.openclaw || {};
-  sessionMeta.textContent = `turns: ${count} | model: ${openclaw.model || "openclaw:main"}${openclaw.agent ? ` | agent: ${openclaw.agent}` : ""}`;
+  sessionMeta.textContent = `turns: ${state.lastTurnCount} | model: ${openclaw.model || "openclaw:main"}${openclaw.agent ? ` | agent: ${openclaw.agent}` : ""}`;
+  restoreMessages(session.turns || []);
 }
 
 function restoreMessages(turns) {
   messages.innerHTML = "";
   if (!turns.length) {
-    appendMessage("assistant", "会话已恢复。先注入当前页面，或直接提问。");
+    appendMessage("assistant", "会话已恢复。先注入所选标签页，或直接提问。");
     return;
   }
   for (const turn of turns) {
-    appendMessage(turn.role === "system" ? "assistant" : turn.role, turn.text);
+    const role = turn.role === "system" ? "assistant" : turn.role;
+    appendMessage(role, normalizeTurnText(turn));
   }
+}
+
+function normalizeTurnText(turn) {
+  const raw = typeof turn.text === "string" ? turn.text : "";
+  try {
+    const payload = JSON.parse(raw);
+    if (typeof payload.answerText === "string" && payload.answerText.trim()) {
+      return payload.answerText.trim();
+    }
+    if (payload.output?.text) {
+      return payload.output.text;
+    }
+  } catch (_error) {
+    // Ignore JSON parse errors.
+  }
+  return raw;
 }
 
 function appendMessage(role, text) {
@@ -144,6 +250,55 @@ function appendMessage(role, text) {
   node.textContent = text;
   messages.appendChild(node);
   messages.scrollTop = messages.scrollHeight;
+}
+
+function startPolling() {
+  stopPolling();
+  state.pollTimer = window.setInterval(refreshSessionSilently, 2000);
+}
+
+function stopPolling() {
+  if (state.pollTimer) {
+    window.clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+}
+
+async function refreshSessionSilently() {
+  if (!state.sessionId) {
+    return;
+  }
+  try {
+    const loaded = await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
+    const nextTurns = loaded.session.turns?.length || 0;
+    if (nextTurns !== state.lastTurnCount) {
+      applySession(loaded.session);
+      setStatus("ok", "会话已更新");
+    }
+  } catch (_error) {
+    setStatus("warn", "会话刷新失败");
+  }
+}
+
+function setCaptureMode(mode) {
+  state.captureMode = mode;
+  document.getElementById("modeFullContent").classList.toggle("active", mode === "full-content");
+  document.getElementById("modeUrlReference").classList.toggle("active", mode === "url-reference");
+}
+
+function selectActiveTabOnly() {
+  state.selectedTabIds = new Set(state.availableTabs.filter((tab) => tab.active).map((tab) => tab.id));
+  renderTabs();
+}
+
+function selectAllTabs() {
+  state.selectedTabIds = new Set(state.availableTabs.map((tab) => tab.id));
+  renderTabs();
+}
+
+function setStatus(kind, text) {
+  statusPulse.className = `status-pulse ${kind}`;
+  connectionStatus.textContent = text;
 }
 
 function sendRuntimeMessage(type, payload = {}) {
@@ -164,4 +319,13 @@ function sendRuntimeMessage(type, payload = {}) {
 
 function openSettingsPage() {
   chrome.runtime.openOptionsPage();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

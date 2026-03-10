@@ -8,6 +8,10 @@ const fallbackToLocal = document.getElementById("fallbackToLocal");
 const validationStatus = document.getElementById("validationStatus");
 const mitigationList = document.getElementById("mitigationList");
 const openclawSaved = document.getElementById("openclawSaved");
+const sessionInjectPrompt = document.getElementById("sessionInjectPrompt");
+const askPrefix = document.getElementById("askPrefix");
+const defaultCaptureMode = document.getElementById("defaultCaptureMode");
+const promptSaved = document.getElementById("promptSaved");
 const feedbackDialog = document.getElementById("feedbackDialog");
 const feedbackTitle = document.getElementById("feedbackTitle");
 const feedbackBody = document.getElementById("feedbackBody");
@@ -15,18 +19,24 @@ const feedbackBody = document.getElementById("feedbackBody");
 document.getElementById("saveGateway").addEventListener("click", saveGatewaySettings);
 document.getElementById("saveOpenClaw").addEventListener("click", saveOpenClawSettings);
 document.getElementById("testConnection").addEventListener("click", testOpenClawSettings);
+document.getElementById("savePrompts").addEventListener("click", savePromptSettings);
 
 bootstrap();
 
 async function bootstrap() {
   try {
-    const gateway = await sendRuntimeMessage("getGatewaySettings");
+    const [gateway, settings, prompts] = await Promise.all([
+      sendRuntimeMessage("getGatewaySettings"),
+      sendRuntimeMessage("getOpenClawSettings"),
+      sendRuntimeMessage("getPromptSettings"),
+    ]);
+
     gatewayBase.value = gateway.gatewayBase;
     gatewaySaved.textContent = gateway.gatewayBase ? "已保存" : "未保存";
     gatewaySaved.className = `badge ${gateway.gatewayBase ? "ok" : "muted"}`;
 
-    const settings = await sendRuntimeMessage("getOpenClawSettings");
     hydrateOpenClawSettings(settings.settings);
+    hydratePromptSettings(prompts.promptSettings);
   } catch (error) {
     showFeedback("加载失败", `设置页初始化失败：${String(error.message || error)}`);
   }
@@ -35,12 +45,20 @@ async function bootstrap() {
 function hydrateOpenClawSettings(settings = {}) {
   openclawBaseUrl.value = settings.baseUrl || "";
   bearerToken.value = "";
-  bearerToken.placeholder = settings.hasBearerToken ? "已保存，留空表示不修改" : "oc_...";
+  bearerToken.placeholder = settings.hasBearerToken ? "已保存，留空表示不修改" : "留空时优先使用 OPENCLAW_GATEWAY_TOKEN";
   modelName.value = settings.model || "openclaw:main";
   agentId.value = settings.agent || "";
   fallbackToLocal.checked = Boolean(settings.fallbackToLocal ?? true);
   openclawSaved.textContent = settings.baseUrl ? "已保存" : "未保存";
   openclawSaved.className = `badge ${settings.baseUrl ? "ok" : "muted"}`;
+}
+
+function hydratePromptSettings(settings = {}) {
+  sessionInjectPrompt.value = settings.sessionInjectPrompt || "";
+  askPrefix.value = settings.askPrefix || "";
+  defaultCaptureMode.value = settings.defaultCaptureMode || "full-content";
+  promptSaved.textContent = settings.sessionInjectPrompt || settings.askPrefix ? "已保存" : "未保存";
+  promptSaved.className = `badge ${settings.sessionInjectPrompt || settings.askPrefix ? "ok" : "muted"}`;
 }
 
 function collectOpenClawSettings() {
@@ -50,6 +68,14 @@ function collectOpenClawSettings() {
     model: modelName.value.trim() || "openclaw:main",
     agent: agentId.value.trim(),
     fallbackToLocal: fallbackToLocal.checked,
+  };
+}
+
+function collectPromptSettings() {
+  return {
+    sessionInjectPrompt: sessionInjectPrompt.value.trim(),
+    askPrefix: askPrefix.value.trim(),
+    defaultCaptureMode: defaultCaptureMode.value,
   };
 }
 
@@ -83,6 +109,22 @@ async function saveOpenClawSettings() {
     await testOpenClawSettings({ silentSuccess: true });
   } catch (error) {
     showFeedback("保存失败", `OpenClaw 配置保存失败：${String(error.message || error)}`);
+  }
+}
+
+async function savePromptSettings() {
+  try {
+    const saved = await sendRuntimeMessage("savePromptSettings", collectPromptSettings());
+    hydratePromptSettings(saved.promptSettings);
+    showFeedback(
+      "提示词配置已保存",
+      [
+        "这些配置会在 session 打开后直接作用于侧栏。",
+        `默认注入模式：${saved.promptSettings.defaultCaptureMode === "url-reference" ? "只注入 URL 引用" : "抓取正文"}`,
+      ].join("\n")
+    );
+  } catch (error) {
+    showFeedback("保存失败", `提示词配置保存失败：${String(error.message || error)}`);
   }
 }
 

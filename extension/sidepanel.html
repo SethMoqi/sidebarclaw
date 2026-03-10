@@ -9,70 +9,69 @@
   <body>
     <div class="app">
       <header class="topbar">
-        <div>
-          <h1>OpenClaw Sidecar</h1>
-          <p>Experimental extension for local OpenClaw</p>
+        <div class="brand">
+          <span id="statusPulse" class="status-pulse idle" aria-hidden="true"></span>
+          <div>
+            <h1>OpenClaw</h1>
+            <p id="sessionMeta">未连接到会话</p>
+          </div>
         </div>
         <div class="topbar-actions">
-          <button id="openSettingsBtn" class="ghost">插件设置</button>
-          <button id="newSessionBtn" class="ghost">新对话</button>
+          <button id="openSettingsBtn" class="ghost">设置</button>
+          <button id="newSessionBtn" class="ghost">新会话</button>
         </div>
       </header>
 
-      <section class="card">
-        <div class="card-head">
-          <h2>连接状态</h2>
-          <span id="connectionStatus" class="muted">未检查</span>
-        </div>
-        <div class="notice">
-          配置入口只保留在插件设置页。侧栏不编辑 Gateway、OpenClaw 地址或 Token，只显示当前工作状态。
-        </div>
-        <div id="connectionSummary" class="status-grid"></div>
-        <div class="actions">
-          <button id="refreshStatusBtn" class="ghost">刷新状态</button>
-          <button id="openSettingsSecondaryBtn" class="ghost">打开设置</button>
-        </div>
+      <section class="status-strip">
+        <button id="refreshStatusBtn" class="status-chip ghost" type="button">
+          <span id="connectionStatus">未检查</span>
+        </button>
+        <div id="sessionLabel" class="status-chip">未创建</div>
+        <div id="tabSummary" class="status-chip muted">0 个标签页</div>
       </section>
 
-      <section class="card">
-        <div class="card-head">
-          <h2>当前会话</h2>
-          <span id="sessionLabel" class="muted">未创建</span>
-        </div>
-        <div id="sessionMeta" class="muted">注入和提问都会进入当前会话</div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>提示词模板</h2>
-        </div>
-        <div id="promptList" class="prompt-list"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>注入当前页面</h2>
-        </div>
-        <label>
-          附加指令
-          <input id="instruction" type="text" placeholder="总结后支持后续检索" />
-        </label>
-        <div class="actions">
-          <button id="injectPage">注入当前页</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>对话</h2>
-        </div>
+      <main class="chat-shell">
         <div id="messages" class="messages"></div>
-        <label>
-          提问
-          <textarea id="question" rows="5" placeholder="例如：总结这页，并指出最关键的证据段落"></textarea>
-        </label>
-        <div class="actions">
-          <button id="sendQuestion">发送问题</button>
+      </main>
+
+      <section class="composer-shell">
+        <div class="prompt-row">
+          <div id="promptList" class="prompt-list"></div>
+        </div>
+        <details class="tools-panel">
+          <summary>来源与注入</summary>
+          <div class="tools-grid">
+            <div class="mode-switch" role="radiogroup" aria-label="注入模式">
+              <button id="modeFullContent" class="mode-chip active" type="button">抓取正文</button>
+              <button id="modeUrlReference" class="mode-chip" type="button">只注入 URL</button>
+            </div>
+            <div class="tools-head">
+              <div>
+                <strong>标签页</strong>
+                <span id="selectedTabsLabel" class="muted">未选择</span>
+              </div>
+              <div class="mini-actions">
+                <button id="refreshTabsBtn" class="ghost" type="button">刷新标签页</button>
+                <button id="selectActiveBtn" class="ghost" type="button">仅当前</button>
+                <button id="selectAllBtn" class="ghost" type="button">全选</button>
+              </div>
+            </div>
+            <div id="tabList" class="tab-list"></div>
+            <label>
+              注入提示词
+              <textarea id="instruction" rows="3" placeholder="总结后支持后续检索，并保留最关键的证据段落。"></textarea>
+            </label>
+            <div class="actions">
+              <button id="injectPage" type="button">注入所选标签页</button>
+            </div>
+          </div>
+        </details>
+        <div class="composer">
+          <label class="sr-only" for="question">提问</label>
+          <textarea id="question" rows="4" placeholder="围绕已注入网页继续提问"></textarea>
+          <div class="actions">
+            <button id="sendQuestion" type="button">发送</button>
+          </div>
         </div>
       </section>
     </div>

@@ -8,6 +8,9 @@
 - 指定 `model` 和 `agent`
 - 通过独立设置页保存 `OpenClaw Base URL` 与 `Bearer Token`
 - 将当前网页注入到会话中并继续多轮提问
+- 支持选择多个打开的标签页一起注入
+- 支持 `抓取正文` 与 `只注入 URL 引用` 两种注入模式
+- 支持配置默认注入提示词和默认提问前缀
 - 当 `OpenClaw` 不可用时，回退到本地 longdoc 检索链路
 - 支持本地文档或网页抓取 JSON 的入库、切块、检索和证据输出
 
@@ -24,6 +27,12 @@
 
 ```bash
 PYTHONPATH=src python3 -m longdoc.gateway --port 8787 --data-dir .gateway_data
+```
+
+如果系统默认 `python3` 低于 3.11，改用启动脚本：
+
+```bash
+scripts/start_gateway.sh --port 8787 --data-dir .gateway_data
 ```
 
 然后访问：
@@ -43,7 +52,9 @@ http://127.0.0.1:8787/
 7. 保存 `Gateway Base URL`
 8. 保存 `OpenClaw Base URL`、`Bearer Token`、`Model`、`Agent`
 9. 点击“测试连接”
-10. 打开侧栏，创建新会话并注入当前页面
+10. 在设置页保存默认注入提示词、默认提问前缀和默认注入模式
+11. 打开侧栏，选择一个或多个标签页并注入
+12. 在侧栏继续提问
 
 ## CLI 示例
 

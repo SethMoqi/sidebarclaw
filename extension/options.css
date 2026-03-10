@@ -22,7 +22,9 @@ body {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
@@ -85,13 +87,20 @@ label {
   font-size: 14px;
 }
 
-input {
+input,
+textarea,
+select {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 11px 12px;
   background: #fff;
   color: var(--text);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 96px;
 }
 
 .toggle {

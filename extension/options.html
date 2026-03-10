@@ -31,6 +31,9 @@
         <div class="actions">
           <button id="saveGateway">保存 Gateway</button>
         </div>
+        <div class="validation warn">
+          先启动本地 adapter gateway，再进行“测试连接”。默认地址是 `http://127.0.0.1:8787`。
+        </div>
       </section>
 
       <section class="panel">
@@ -67,6 +70,34 @@
         </div>
         <div id="validationStatus" class="validation empty">尚未校验配置</div>
         <ul id="mitigationList" class="mitigations"></ul>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>提示词配置</h2>
+            <p>这里配置 session 打开后默认使用的注入提示词，以及默认提问前缀。</p>
+          </div>
+          <span id="promptSaved" class="badge muted">未保存</span>
+        </div>
+        <label>
+          默认注入提示词
+          <textarea id="sessionInjectPrompt" rows="4" placeholder="总结后支持后续检索，并保留最关键的证据段落。"></textarea>
+        </label>
+        <label>
+          默认提问前缀
+          <textarea id="askPrefix" rows="3" placeholder="请基于当前会话里已注入的网页内容回答。"></textarea>
+        </label>
+        <label>
+          默认注入模式
+          <select id="defaultCaptureMode">
+            <option value="full-content">抓取正文</option>
+            <option value="url-reference">只注入 URL 引用</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button id="savePrompts" class="ghost">保存提示词配置</button>
+        </div>
       </section>
     </main>
 
