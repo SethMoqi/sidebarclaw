@@ -4,15 +4,8 @@ const prompts = [
   { title: "结构化输出", body: "请将这页整理成适合知识库归档的结构化摘要。" },
 ];
 
-const gatewayBase = document.getElementById("gatewayBase");
-const gatewayHint = document.getElementById("gatewayHint");
-const openclawBaseUrl = document.getElementById("openclawBaseUrl");
-const bearerToken = document.getElementById("bearerToken");
-const modelName = document.getElementById("modelName");
-const agentId = document.getElementById("agentId");
-const fallbackToLocal = document.getElementById("fallbackToLocal");
-const validationStatus = document.getElementById("validationStatus");
-const mitigationList = document.getElementById("mitigationList");
+const connectionStatus = document.getElementById("connectionStatus");
+const connectionSummary = document.getElementById("connectionSummary");
 const sessionLabel = document.getElementById("sessionLabel");
 const sessionMeta = document.getElementById("sessionMeta");
 const promptList = document.getElementById("promptList");
@@ -20,12 +13,10 @@ const instruction = document.getElementById("instruction");
 const question = document.getElementById("question");
 const messages = document.getElementById("messages");
 
-document.getElementById("saveGateway").addEventListener("click", saveGatewaySettings);
-document.getElementById("reloadSettings").addEventListener("click", bootstrap);
-document.getElementById("saveOpenClaw").addEventListener("click", saveOpenClawSettings);
-document.getElementById("testConnection").addEventListener("click", testOpenClawSettings);
 document.getElementById("newSessionBtn").addEventListener("click", createSession);
 document.getElementById("openSettingsBtn").addEventListener("click", openSettingsPage);
+document.getElementById("openSettingsSecondaryBtn").addEventListener("click", openSettingsPage);
+document.getElementById("refreshStatusBtn").addEventListener("click", bootstrap);
 document.getElementById("injectPage").addEventListener("click", injectPage);
 document.getElementById("sendQuestion").addEventListener("click", sendQuestion);
 
@@ -33,13 +24,9 @@ bootstrap();
 renderPromptList();
 
 async function bootstrap() {
+  await renderConnectionSummary();
+
   const gateway = await sendRuntimeMessage("getGatewaySettings");
-  gatewayBase.value = gateway.gatewayBase;
-  gatewayHint.textContent = gateway.gatewayBase;
-
-  const settings = await sendRuntimeMessage("getOpenClawSettings");
-  hydrateOpenClawSettings(settings.settings);
-
   if (gateway.sessionId) {
     try {
       const loaded = await sendRuntimeMessage("loadSession", { sessionId: gateway.sessionId });
@@ -52,6 +39,30 @@ async function bootstrap() {
   }
 
   await createSession();
+}
+
+async function renderConnectionSummary() {
+  const [gateway, openclaw] = await Promise.all([
+    sendRuntimeMessage("getGatewaySettings"),
+    sendRuntimeMessage("getOpenClawSettings"),
+  ]);
+  const settings = openclaw.settings || {};
+  const cards = [
+    { label: "Gateway", value: gateway.gatewayBase ? "已配置" : "未配置" },
+    { label: "Model", value: settings.model || "openclaw:main" },
+    { label: "Agent", value: settings.agent || "未指定" },
+    { label: "Auth", value: settings.hasBearerToken ? "Token 已保存" : "未保存 Token" },
+  ];
+
+  connectionSummary.innerHTML = "";
+  for (const item of cards) {
+    const node = document.createElement("div");
+    node.className = "status-item";
+    node.innerHTML = `<strong>${item.label}</strong><span>${item.value}</span>`;
+    connectionSummary.appendChild(node);
+  }
+
+  connectionStatus.textContent = settings.baseUrl ? "已配置 OpenClaw" : "仅本地 fallback";
 }
 
 function renderPromptList() {
@@ -68,55 +79,6 @@ function renderPromptList() {
   }
 }
 
-function hydrateOpenClawSettings(settings = {}) {
-  openclawBaseUrl.value = settings.baseUrl || "";
-  bearerToken.value = "";
-  bearerToken.placeholder = settings.hasBearerToken ? "已保存，留空表示不修改" : "oc_...";
-  modelName.value = settings.model || "openclaw:main";
-  agentId.value = settings.agent || "";
-  fallbackToLocal.checked = Boolean(settings.fallbackToLocal ?? true);
-}
-
-function collectOpenClawSettings() {
-  return {
-    baseUrl: openclawBaseUrl.value.trim(),
-    bearerToken: bearerToken.value.trim(),
-    model: modelName.value.trim() || "openclaw:main",
-    agent: agentId.value.trim(),
-    fallbackToLocal: fallbackToLocal.checked,
-  };
-}
-
-async function saveGatewaySettings() {
-  const saved = await sendRuntimeMessage("saveGatewaySettings", {
-    gatewayBase: gatewayBase.value.trim(),
-  });
-  gatewayHint.textContent = saved.gatewayBase;
-  appendMessage("assistant", `Gateway 已保存：${saved.gatewayBase}`);
-}
-
-async function saveOpenClawSettings() {
-  const saved = await sendRuntimeMessage("saveOpenClawSettings", collectOpenClawSettings());
-  hydrateOpenClawSettings(saved.settings);
-  appendMessage(
-    "assistant",
-    `OpenClaw 设置已保存：${saved.settings.baseUrl || "仅本地 fallback"} | model: ${saved.settings.model}${saved.settings.agent ? ` | agent: ${saved.settings.agent}` : ""}`
-  );
-  await testOpenClawSettings();
-}
-
-async function testOpenClawSettings() {
-  const result = await sendRuntimeMessage("validateOpenClawSettings", collectOpenClawSettings());
-  validationStatus.className = `validation ${result.status || "warn"}`;
-  validationStatus.textContent = result.message || "未返回校验结果";
-  mitigationList.innerHTML = "";
-  for (const item of result.mitigations || []) {
-    const li = document.createElement("li");
-    li.textContent = item;
-    mitigationList.appendChild(li);
-  }
-}
-
 async function createSession() {
   const created = await sendRuntimeMessage("createSession");
   renderSession(created.session);
@@ -127,7 +89,6 @@ async function createSession() {
 async function injectPage() {
   const result = await sendRuntimeMessage("injectCurrentPage", {
     instruction: instruction.value.trim(),
-    openclaw: collectOpenClawSettings(),
   });
   if (result.sessionId) {
     const loaded = await sendRuntimeMessage("loadSession", { sessionId: result.sessionId });
@@ -145,11 +106,6 @@ async function sendQuestion() {
   question.value = "";
   const result = await sendRuntimeMessage("askCurrentSession", {
     question: text,
-    openclaw: {
-      model: collectOpenClawSettings().model,
-      agent: collectOpenClawSettings().agent,
-      fallbackToLocal: collectOpenClawSettings().fallbackToLocal,
-    },
   });
   appendMessage("assistant", buildAnswer(result));
 }

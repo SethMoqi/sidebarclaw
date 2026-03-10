@@ -8,6 +8,9 @@ const fallbackToLocal = document.getElementById("fallbackToLocal");
 const validationStatus = document.getElementById("validationStatus");
 const mitigationList = document.getElementById("mitigationList");
 const openclawSaved = document.getElementById("openclawSaved");
+const feedbackDialog = document.getElementById("feedbackDialog");
+const feedbackTitle = document.getElementById("feedbackTitle");
+const feedbackBody = document.getElementById("feedbackBody");
 
 document.getElementById("saveGateway").addEventListener("click", saveGatewaySettings);
 document.getElementById("saveOpenClaw").addEventListener("click", saveOpenClawSettings);
@@ -16,13 +19,17 @@ document.getElementById("testConnection").addEventListener("click", testOpenClaw
 bootstrap();
 
 async function bootstrap() {
-  const gateway = await sendRuntimeMessage("getGatewaySettings");
-  gatewayBase.value = gateway.gatewayBase;
-  gatewaySaved.textContent = gateway.gatewayBase ? "已保存" : "未保存";
-  gatewaySaved.className = `badge ${gateway.gatewayBase ? "ok" : "muted"}`;
+  try {
+    const gateway = await sendRuntimeMessage("getGatewaySettings");
+    gatewayBase.value = gateway.gatewayBase;
+    gatewaySaved.textContent = gateway.gatewayBase ? "已保存" : "未保存";
+    gatewaySaved.className = `badge ${gateway.gatewayBase ? "ok" : "muted"}`;
 
-  const settings = await sendRuntimeMessage("getOpenClawSettings");
-  hydrateOpenClawSettings(settings.settings);
+    const settings = await sendRuntimeMessage("getOpenClawSettings");
+    hydrateOpenClawSettings(settings.settings);
+  } catch (error) {
+    showFeedback("加载失败", `设置页初始化失败：${String(error.message || error)}`);
+  }
 }
 
 function hydrateOpenClawSettings(settings = {}) {
@@ -47,22 +54,63 @@ function collectOpenClawSettings() {
 }
 
 async function saveGatewaySettings() {
-  const saved = await sendRuntimeMessage("saveGatewaySettings", {
-    gatewayBase: gatewayBase.value.trim(),
-  });
-  gatewayBase.value = saved.gatewayBase;
-  gatewaySaved.textContent = "已保存";
-  gatewaySaved.className = "badge ok";
+  try {
+    const saved = await sendRuntimeMessage("saveGatewaySettings", {
+      gatewayBase: gatewayBase.value.trim(),
+    });
+    gatewayBase.value = saved.gatewayBase;
+    gatewaySaved.textContent = "已保存";
+    gatewaySaved.className = "badge ok";
+    showFeedback("Gateway 已保存", `当前 Gateway Base URL：\n${saved.gatewayBase}`);
+  } catch (error) {
+    showFeedback("保存失败", `Gateway 配置保存失败：${String(error.message || error)}`);
+  }
 }
 
 async function saveOpenClawSettings() {
-  const saved = await sendRuntimeMessage("saveOpenClawSettings", collectOpenClawSettings());
-  hydrateOpenClawSettings(saved.settings);
-  await testOpenClawSettings();
+  try {
+    const saved = await sendRuntimeMessage("saveOpenClawSettings", collectOpenClawSettings());
+    hydrateOpenClawSettings(saved.settings);
+    showFeedback(
+      "OpenClaw 设置已保存",
+      [
+        `Model: ${saved.settings.model || "openclaw:main"}`,
+        `Agent: ${saved.settings.agent || "未指定"}`,
+        `Token: ${saved.settings.hasBearerToken ? "已保存" : "未保存"}`,
+        `Fallback: ${saved.settings.fallbackToLocal ? "开启" : "关闭"}`,
+      ].join("\n")
+    );
+    await testOpenClawSettings({ silentSuccess: true });
+  } catch (error) {
+    showFeedback("保存失败", `OpenClaw 配置保存失败：${String(error.message || error)}`);
+  }
 }
 
-async function testOpenClawSettings() {
-  const result = await sendRuntimeMessage("validateOpenClawSettings", collectOpenClawSettings());
+async function testOpenClawSettings(options = {}) {
+  try {
+    const result = await sendRuntimeMessage("validateOpenClawSettings", collectOpenClawSettings());
+    renderValidation(result);
+    if (!options.silentSuccess) {
+      showFeedback(
+        "连接测试结果",
+        [
+          result.message || "未返回校验结果",
+          "",
+          ...(result.mitigations || []).map((item, index) => `${index + 1}. ${item}`),
+        ].join("\n")
+      );
+    }
+  } catch (error) {
+    renderValidation({
+      status: "error",
+      message: `校验失败：${String(error.message || error)}`,
+      mitigations: [],
+    });
+    showFeedback("连接测试失败", `无法完成连接测试：${String(error.message || error)}`);
+  }
+}
+
+function renderValidation(result) {
   validationStatus.className = `validation ${result.status || "warn"}`;
   validationStatus.textContent = result.message || "未返回校验结果";
   mitigationList.innerHTML = "";
@@ -71,6 +119,16 @@ async function testOpenClawSettings() {
     li.textContent = item;
     mitigationList.appendChild(li);
   }
+}
+
+function showFeedback(title, body) {
+  feedbackTitle.textContent = title;
+  feedbackBody.textContent = body;
+  if (typeof feedbackDialog.showModal === "function") {
+    feedbackDialog.showModal();
+    return;
+  }
+  window.alert(`${title}\n\n${body}`);
 }
 
 function sendRuntimeMessage(type, payload = {}) {

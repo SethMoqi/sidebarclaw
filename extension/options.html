@@ -37,17 +37,17 @@
         <div class="panel-head">
           <div>
             <h2>OpenClaw</h2>
-            <p>以下设置写入 gateway 的独立配置存储，不会进入页面注入 payload 或会话文件。</p>
+            <p>以下设置写入 gateway 的独立配置存储，不会进入页面注入 payload 或会话文件。官方交流机制优先走 Gateway WebSocket RPC。</p>
           </div>
           <span id="openclawSaved" class="badge muted">未保存</span>
         </div>
         <label>
-          Base URL
-          <input id="openclawBaseUrl" type="url" placeholder="http://127.0.0.1:9000" />
+          Gateway URL
+          <input id="openclawBaseUrl" type="url" placeholder="http://127.0.0.1:17562/3bb02e13" />
         </label>
         <label>
-          Bearer Token
-          <input id="bearerToken" type="password" placeholder="oc_..." />
+          Gateway Token
+          <input id="bearerToken" type="password" placeholder="留空时优先使用 OPENCLAW_GATEWAY_TOKEN" />
         </label>
         <label>
           Model
@@ -69,6 +69,19 @@
         <ul id="mitigationList" class="mitigations"></ul>
       </section>
     </main>
+
+    <dialog id="feedbackDialog" class="feedback-dialog">
+      <form method="dialog" class="feedback-sheet">
+        <div class="feedback-head">
+          <h2 id="feedbackTitle">操作结果</h2>
+          <button class="icon-button" value="cancel" aria-label="关闭">关闭</button>
+        </div>
+        <div id="feedbackBody" class="feedback-body"></div>
+        <menu class="feedback-actions">
+          <button value="confirm">我知道了</button>
+        </menu>
+      </form>
+    </dialog>
 
     <script src="options.js" type="module"></script>
   </body>

@@ -78,6 +78,31 @@ label {
   line-height: 1.5;
 }
 
+.status-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.status-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 252, 247, 0.88);
+}
+
+.status-item strong {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.status-item span {
+  line-height: 1.4;
+}
+
 .card-head {
   display: flex;
   justify-content: space-between;

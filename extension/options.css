@@ -167,3 +167,50 @@ button.ghost {
   padding-left: 20px;
   line-height: 1.5;
 }
+
+.feedback-dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.feedback-dialog::backdrop {
+  background: rgba(19, 16, 13, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.feedback-sheet {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #fffaf4;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.feedback-body {
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+}
+
+.icon-button {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}

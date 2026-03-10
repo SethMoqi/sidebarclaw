@@ -108,7 +108,7 @@ async function injectCurrentPage(payload) {
     input: {
       instruction: payload.instruction || "",
     },
-    openclaw,
+    ...(openclaw ? { openclaw } : {}),
   });
   if (response.sessionId) {
     await chrome.storage.local.set({ sessionId: response.sessionId });
@@ -125,7 +125,7 @@ async function askCurrentSession(payload) {
   const response = await postJson(`${gatewayBase}/ask`, {
     sessionId: activeSessionId,
     question: payload.question || "",
-    openclaw: normalizeOpenClawPayload(payload.openclaw),
+    ...(normalizeOpenClawPayload(payload.openclaw) ? { openclaw: normalizeOpenClawPayload(payload.openclaw) } : {}),
   });
   if (response.sessionId) {
     await chrome.storage.local.set({ sessionId: response.sessionId });
@@ -134,6 +134,13 @@ async function askCurrentSession(payload) {
 }
 
 function normalizeOpenClawPayload(openclaw = {}) {
+  const hasOverride =
+    typeof openclaw.model === "string" ||
+    typeof openclaw.agent === "string" ||
+    typeof openclaw.fallbackToLocal === "boolean";
+  if (!hasOverride) {
+    return null;
+  }
   return {
     model: String(openclaw.model || "openclaw:main"),
     agent: String(openclaw.agent || ""),

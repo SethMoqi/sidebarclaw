@@ -21,53 +21,17 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>连接设置</h2>
-          <span id="gatewayHint" class="muted"></span>
+          <h2>连接状态</h2>
+          <span id="connectionStatus" class="muted">未检查</span>
         </div>
         <div class="notice">
-          敏感连接信息保存在扩展设置与 gateway 独立存储中，不会写入当前页面输入或会话记录。
+          配置入口只保留在插件设置页。侧栏不编辑 Gateway、OpenClaw 地址或 Token，只显示当前工作状态。
         </div>
-        <label>
-          Gateway Base URL
-          <input id="gatewayBase" type="url" placeholder="http://127.0.0.1:8787" />
-        </label>
+        <div id="connectionSummary" class="status-grid"></div>
         <div class="actions">
-          <button id="saveGateway" class="ghost">保存 Gateway</button>
-          <button id="reloadSettings" class="ghost">刷新设置</button>
+          <button id="refreshStatusBtn" class="ghost">刷新状态</button>
+          <button id="openSettingsSecondaryBtn" class="ghost">打开设置</button>
         </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>OpenClaw 设置</h2>
-          <span class="muted">物理隔离存储</span>
-        </div>
-        <label>
-          Base URL
-          <input id="openclawBaseUrl" type="url" placeholder="http://127.0.0.1:9000" />
-        </label>
-        <label>
-          Bearer Token
-          <input id="bearerToken" type="password" placeholder="oc_..." />
-        </label>
-        <label>
-          Model
-          <input id="modelName" type="text" placeholder="openclaw:main" />
-        </label>
-        <label>
-          Agent
-          <input id="agentId" type="text" placeholder="research-agent" />
-        </label>
-        <label class="toggle">
-          <input id="fallbackToLocal" type="checkbox" checked />
-          <span>OpenClaw 失败时回退到本地 longdoc</span>
-        </label>
-        <div class="actions">
-          <button id="testConnection" class="ghost">测试连接</button>
-          <button id="saveOpenClaw">保存 OpenClaw 设置</button>
-        </div>
-        <div id="validationStatus" class="validation empty">尚未校验配置</div>
-        <ul id="mitigationList" class="mitigations"></ul>
       </section>
 
       <section class="card">

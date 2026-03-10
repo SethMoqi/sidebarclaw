@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import secrets
+import subprocess
+import time
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from mimetypes import guess_type
 from pathlib import Path
-from urllib import error, request
 from urllib.parse import urlparse
 
 from .chunking import build_chunks
@@ -103,7 +105,7 @@ def _public_openclaw_settings(config: dict) -> dict:
         "model": config.get("model", "openclaw:main"),
         "agent": config.get("agent", ""),
         "fallbackToLocal": bool(config.get("fallbackToLocal", True)),
-        "hasBearerToken": bool(config.get("bearerToken")),
+        "hasBearerToken": bool(config.get("bearerToken") or os.getenv("OPENCLAW_GATEWAY_TOKEN")),
     }
 
 
@@ -208,31 +210,72 @@ def _resolve_openclaw_runtime_config(data_dir: Path, payload: dict | None) -> di
     override = payload or {}
     return {
         "baseUrl": stored.get("baseUrl", ""),
-        "bearerToken": stored.get("bearerToken", ""),
+        "bearerToken": stored.get("bearerToken") or os.getenv("OPENCLAW_GATEWAY_TOKEN", ""),
         "model": str(override.get("model") or stored.get("model") or "openclaw:main"),
         "agent": str(override.get("agent") or stored.get("agent") or ""),
         "fallbackToLocal": bool(override.get("fallbackToLocal", stored.get("fallbackToLocal", True))),
     }
 
 
-def _proxy_openclaw(base_url: str, path: str, payload: dict, bearer_token: str) -> dict:
-    headers = {"content-type": "application/json"}
-    if bearer_token:
-        headers["Authorization"] = f"Bearer {bearer_token}"
-    req = request.Request(
-        url=f"{base_url}{path}",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
+def _normalize_gateway_ws_url(base_url: str) -> str:
+    parsed = urlparse(base_url.strip())
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("OpenClaw Gateway URL 必须是有效的 http(s) 或 ws(s) 地址。")
+    if parsed.scheme == "http":
+        scheme = "ws"
+    elif parsed.scheme == "https":
+        scheme = "wss"
+    elif parsed.scheme in {"ws", "wss"}:
+        scheme = parsed.scheme
+    else:
+        raise ValueError("OpenClaw Gateway URL 只支持 http、https、ws、wss。")
+    path = parsed.path or ""
+    return f"{scheme}://{parsed.netloc}{path}"
+
+
+def _gateway_session_key(session_id: str, agent: str) -> str:
+    if agent:
+        return f"agent:{agent}:{session_id}"
+    return session_id
+
+
+def _call_openclaw_gateway(*, openclaw: dict, method: str, params: dict, expect_final: bool = False, timeout_ms: int = 20000) -> dict:
+    gateway_url = _normalize_gateway_ws_url(openclaw["baseUrl"])
+    command = [
+        "openclaw",
+        "gateway",
+        "call",
+        method,
+        "--url",
+        gateway_url,
+        "--json",
+        "--timeout",
+        str(timeout_ms),
+        "--params",
+        json.dumps(params, ensure_ascii=False),
+    ]
+    token = str(openclaw.get("bearerToken") or os.getenv("OPENCLAW_GATEWAY_TOKEN") or "").strip()
+    if token:
+        command.extend(["--token", token])
+    if expect_final:
+        command.append("--expect-final")
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
     )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise ValueError(detail or f"OpenClaw gateway call failed: {method}")
+    stdout = result.stdout.strip()
+    if not stdout:
+        return {}
     try:
-        with request.urlopen(req, timeout=20) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise ValueError(f"OpenClaw HTTP {exc.code}: {body}") from exc
-    except error.URLError as exc:
-        raise ValueError(f"OpenClaw connection failed: {exc.reason}") from exc
+        return json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"OpenClaw gateway returned invalid JSON for {method}: {stdout}") from exc
 
 
 def _build_sidebar_text(*, title: str, url: str, selected_text: str, content: str) -> str:
@@ -243,68 +286,88 @@ def _build_sidebar_text(*, title: str, url: str, selected_text: str, content: st
     return "\n".join(parts)
 
 
-def _build_openclaw_responses_payload(
-    *,
-    openclaw: dict,
-    session_id: str | None,
-    sidebar_text: str,
-    instruction: str,
-    question: str,
-) -> dict:
-    instructions = [
-        "你是 OpenClaw。请基于用户提供的网页内容完成分析，并输出适合浏览器侧栏展示的简洁结果。",
+def _build_inject_message(*, openclaw: dict, sidebar_text: str, instruction: str) -> str:
+    lines = [
+        "请将下面网页内容作为当前会话的上下文保存，供后续问题使用。",
+        "不要总结，不要解释，不要提问。",
+        "完成后只回复：NO_REPLY",
     ]
     if openclaw.get("agent"):
-        instructions.append(f"Preferred agent: {openclaw['agent']}.")
+        lines.append(f"当前优先 agent: {openclaw['agent']}")
     if instruction:
-        instructions.append(f"Task instruction: {instruction}.")
-    if question:
-        instructions.append(f"User question: {question}.")
-    return {
-        "model": openclaw["model"],
-        "user": session_id or "browser-sidebar:local-user",
-        "instructions": " ".join(instructions),
-        "metadata": {
-            "source": "browser_sidebar",
-            "agent": openclaw.get("agent", ""),
-            "session_id": session_id or "",
+        lines.append(f"附加要求: {instruction}")
+    lines.extend(["", sidebar_text])
+    return "\n".join(lines)
+
+
+def _build_question_message(question: str) -> str:
+    return question.strip()
+
+
+def _extract_gateway_message_text(payload: dict) -> str:
+    if isinstance(payload.get("text"), str) and payload["text"].strip():
+        return payload["text"].strip()
+    content = payload.get("content")
+    if isinstance(content, list):
+        texts = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                texts.append(text.strip())
+        if texts:
+            return "\n\n".join(texts)
+    message = payload.get("message")
+    if isinstance(message, dict):
+        return _extract_gateway_message_text(message)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _fetch_gateway_history(*, openclaw: dict, session_key: str, limit: int = 20) -> dict:
+    return _call_openclaw_gateway(
+        openclaw=openclaw,
+        method="chat.history",
+        params={"sessionKey": session_key, "limit": limit},
+        timeout_ms=10000,
+    )
+
+
+def _send_gateway_message_and_wait(*, openclaw: dict, session_key: str, message: str, idempotency_key: str, timeout_s: float = 20.0) -> dict:
+    before = _fetch_gateway_history(openclaw=openclaw, session_key=session_key, limit=200)
+    before_messages = before.get("messages") if isinstance(before.get("messages"), list) else []
+    before_count = len(before_messages)
+    send_result = _call_openclaw_gateway(
+        openclaw=openclaw,
+        method="chat.send",
+        params={
+            "sessionKey": session_key,
+            "message": message,
+            "deliver": False,
+            "idempotencyKey": idempotency_key,
         },
-        "input": [
-            {
-                "type": "message",
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": sidebar_text,
-                    }
-                ],
-            }
-        ],
+        expect_final=True,
+        timeout_ms=20000,
+    )
+    deadline = time.time() + timeout_s
+    latest_history = before
+    while time.time() < deadline:
+        latest_history = _fetch_gateway_history(openclaw=openclaw, session_key=session_key, limit=200)
+        messages = latest_history.get("messages") if isinstance(latest_history.get("messages"), list) else []
+        if len(messages) > before_count:
+            last_message = messages[-1]
+            if isinstance(last_message, dict) and str(last_message.get("role") or "").lower() == "assistant":
+                return {
+                    "run": send_result,
+                    "history": latest_history,
+                    "message": last_message,
+                }
+        time.sleep(0.35)
+    return {
+        "run": send_result,
+        "history": latest_history,
+        "message": None,
     }
-
-
-def _extract_openclaw_text(response: dict) -> str:
-    if isinstance(response.get("output_text"), str) and response["output_text"].strip():
-        return response["output_text"].strip()
-    texts: list[str] = []
-    output = response.get("output")
-    if isinstance(output, list):
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            content = item.get("content")
-            if not isinstance(content, list):
-                continue
-            for part in content:
-                if not isinstance(part, dict):
-                    continue
-                text = part.get("text") or part.get("value")
-                if isinstance(text, str) and text.strip():
-                    texts.append(text.strip())
-    if texts:
-        return "\n\n".join(texts)
-    return json.dumps(response, ensure_ascii=False, indent=2)
 
 
 def _validate_openclaw_config(config: dict) -> dict:
@@ -313,21 +376,26 @@ def _validate_openclaw_config(config: dict) -> dict:
     checks: list[dict] = []
 
     if normalized["baseUrl"]:
-        parsed = urlparse(normalized["baseUrl"])
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            checks.append({"name": "baseUrl", "status": "error", "message": "Gateway Base URL 必须是有效的 http(s) 地址。"})
-            mitigations.append("将 Gateway Base URL 改成类似 http://127.0.0.1:9000 的地址。")
+        try:
+            ws_url = _normalize_gateway_ws_url(normalized["baseUrl"])
+            checks.append({"name": "baseUrl", "status": "ok", "message": f"Gateway URL 格式有效，将使用 {ws_url}。"})
+        except ValueError as exc:
+            checks.append({"name": "baseUrl", "status": "error", "message": str(exc)})
+            mitigations.append("将 Gateway URL 改成类似 http://127.0.0.1:17562/3bb02e13 或 ws://127.0.0.1:17562/3bb02e13 的地址。")
         else:
-            checks.append({"name": "baseUrl", "status": "ok", "message": "Gateway Base URL 格式有效。"})
+            pass
     else:
         checks.append({"name": "baseUrl", "status": "warn", "message": "未配置 OpenClaw Base URL，将只使用本地 fallback。"})
         mitigations.append("如果要连接真实 OpenClaw，请填写本地 Gateway Base URL。")
 
-    if normalized["baseUrl"] and not normalized["bearerToken"]:
-        checks.append({"name": "bearerToken", "status": "warn", "message": "未提供 Bearer Token，官方 /v1/responses 很可能返回 401。"})
-        mitigations.append("在设置中填入 OpenClaw Gateway 的 Bearer Token。")
+    effective_token = normalized["bearerToken"] or os.getenv("OPENCLAW_GATEWAY_TOKEN", "")
+    if normalized["baseUrl"] and not effective_token:
+        checks.append({"name": "bearerToken", "status": "warn", "message": "未提供 Gateway Token，也没有检测到 OPENCLAW_GATEWAY_TOKEN。"})
+        mitigations.append("在设置中填入 Gateway Token，或在启动 gateway 的环境中设置 OPENCLAW_GATEWAY_TOKEN。")
     elif normalized["bearerToken"]:
-        checks.append({"name": "bearerToken", "status": "ok", "message": "Bearer Token 已提供。"})
+        checks.append({"name": "bearerToken", "status": "ok", "message": "Gateway Token 已提供。"})
+    elif effective_token:
+        checks.append({"name": "bearerToken", "status": "ok", "message": "检测到 OPENCLAW_GATEWAY_TOKEN，可直接复用。" })
 
     if normalized["model"]:
         checks.append({"name": "model", "status": "ok", "message": f"Model: {normalized['model']}"})
@@ -338,17 +406,21 @@ def _validate_openclaw_config(config: dict) -> dict:
     if normalized["agent"]:
         checks.append({"name": "agent", "status": "ok", "message": f"Agent: {normalized['agent']}"})
     else:
-        checks.append({"name": "agent", "status": "warn", "message": "未指定 agent，将由 OpenClaw 默认策略处理。"})
-        mitigations.append("如果有固定工作流，建议明确填写 agent。")
+            checks.append({"name": "agent", "status": "warn", "message": "未指定 agent，将由 OpenClaw 默认策略处理。"})
+            mitigations.append("如果有固定工作流，建议明确填写 agent。")
 
     if normalized["baseUrl"]:
         try:
-            ping = request.Request(url=normalized["baseUrl"], method="GET")
-            with request.urlopen(ping, timeout=3) as response:
-                checks.append({"name": "connectivity", "status": "ok", "message": f"连接成功，HTTP {response.status}。"})
+            health = _call_openclaw_gateway(
+                openclaw={**normalized, "bearerToken": effective_token},
+                method="health",
+                params={},
+                timeout_ms=6000,
+            )
+            checks.append({"name": "connectivity", "status": "ok", "message": f"Gateway WebSocket 连通成功。{json.dumps(health, ensure_ascii=False)}"})
         except Exception as exc:
-            checks.append({"name": "connectivity", "status": "warn", "message": f"未能验证 OpenClaw 连通性: {exc}"})
-            mitigations.append("确认本地 OpenClaw Gateway 已启动，并检查端口、代理和防火墙。")
+            checks.append({"name": "connectivity", "status": "warn", "message": f"未能验证 Gateway WebSocket 连通性: {exc}"})
+            mitigations.append("确认本地 OpenClaw Gateway 已启动，并检查 URL 路径、Token 和端口。")
 
     status = "ok"
     if any(item["status"] == "error" for item in checks):
@@ -386,8 +458,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if parsed.path == "/settings/schema":
             return self._write_json(200, {
                 "fields": [
-                    {"id": "baseUrl", "label": "OpenClaw Base URL", "type": "url", "required": False},
-                    {"id": "bearerToken", "label": "Bearer Token", "type": "password", "required": False},
+                    {"id": "baseUrl", "label": "OpenClaw Gateway URL", "type": "url", "required": False},
+                    {"id": "bearerToken", "label": "Gateway Token", "type": "password", "required": False},
                     {"id": "model", "label": "Model", "type": "text", "required": True},
                     {"id": "agent", "label": "Agent", "type": "text", "required": False},
                     {"id": "fallbackToLocal", "label": "Fallback To Local", "type": "boolean", "required": True},
@@ -506,6 +578,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             "output": build_injected_output(doc, content, instruction=instruction),
             "indexRef": {"docId": doc.doc_id, "path": str(output_dir)},
         }
+        session_id = body.get("sessionId")
         if openclaw["baseUrl"]:
             sidebar_text = _build_sidebar_text(
                 title=doc.title,
@@ -513,26 +586,26 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 selected_text=str(record.metadata.get("selectedText") or ""),
                 content=content,
             )
-            remote_body = _build_openclaw_responses_payload(
-                openclaw=openclaw,
-                session_id=str(body.get("sessionId") or ""),
-                sidebar_text=sidebar_text,
-                instruction=instruction,
-                question="",
-            )
+            session_key = _gateway_session_key(str(session_id or record.input_id), openclaw["agent"])
             try:
-                remote_response = _proxy_openclaw(
-                    openclaw["baseUrl"],
-                    "/v1/responses",
-                    remote_body,
-                    openclaw["bearerToken"],
+                remote_exchange = _send_gateway_message_and_wait(
+                    openclaw=openclaw,
+                    session_key=session_key,
+                    message=_build_inject_message(
+                        openclaw=openclaw,
+                        sidebar_text=sidebar_text,
+                        instruction=instruction,
+                    ),
+                    idempotency_key=f"inject-{record.input_id}",
                 )
+                remote_message = remote_exchange.get("message") or {}
                 payload["openclaw"] = {
-                    "mode": "proxied",
+                    "mode": "gateway-rpc",
                     "model": openclaw["model"],
                     "agent": openclaw["agent"],
-                    "responseText": _extract_openclaw_text(remote_response),
-                    "response": remote_response,
+                    "sessionKey": session_key,
+                    "responseText": _extract_gateway_message_text(remote_message) if remote_message else "NO_REPLY",
+                    "response": remote_exchange,
                 }
             except ValueError as exc:
                 if not openclaw["fallbackToLocal"]:
@@ -543,7 +616,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
                     "agent": openclaw["agent"],
                     "error": str(exc),
                 }
-        session_id = body.get("sessionId")
         if session_id:
             session = _load_session(self.data_dir, str(session_id))
             session["openclaw"] = {
@@ -552,6 +624,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "fallbackToLocal": openclaw["fallbackToLocal"],
                 "configRef": "default",
             }
+            session["openclawSessionKey"] = _gateway_session_key(session["id"], openclaw["agent"])
             session["activeIndexRef"] = payload["indexRef"]
             session["activeDocument"] = {
                 "title": doc.title,
@@ -613,39 +686,30 @@ class GatewayHandler(BaseHTTPRequestHandler):
         openclaw = _resolve_openclaw_runtime_config(self.data_dir, body.get("openclaw") or (session or {}).get("openclaw"))
         response: dict
         if openclaw["baseUrl"]:
-            active_document = (session or {}).get("activeDocument") or {}
-            sidebar_text = _build_sidebar_text(
-                title=str(active_document.get("title") or ""),
-                url=str(active_document.get("url") or ""),
-                selected_text=str(active_document.get("selectedText") or ""),
-                content=str(active_document.get("content") or ""),
-            )
-            remote_body = _build_openclaw_responses_payload(
-                openclaw=openclaw,
-                session_id=str(session_id or ""),
-                sidebar_text=sidebar_text,
-                instruction=str(active_document.get("instruction") or ""),
-                question=question,
+            session_key = (
+                str((session or {}).get("openclawSessionKey") or "")
+                or _gateway_session_key(str(session_id or "browser-sidebar"), openclaw["agent"])
             )
             try:
-                remote_response = _proxy_openclaw(
-                    openclaw["baseUrl"],
-                    "/v1/responses",
-                    remote_body,
-                    openclaw["bearerToken"],
+                remote_exchange = _send_gateway_message_and_wait(
+                    openclaw=openclaw,
+                    session_key=session_key,
+                    message=_build_question_message(question),
+                    idempotency_key=f"ask-{secrets.token_hex(8)}",
                 )
+                remote_message = remote_exchange.get("message") or {}
+                answer_text = _extract_gateway_message_text(remote_message) if remote_message else ""
+                if not answer_text:
+                    answer_text = "OpenClaw 已接收问题，但在轮询窗口内未返回最终 assistant 消息。"
                 response = {
                     "question": question,
-                    "answerText": _extract_openclaw_text(remote_response),
-                    "document": {
-                        "title": str(active_document.get("title") or ""),
-                        "source": str(active_document.get("url") or ""),
-                    },
+                    "answerText": answer_text,
                     "openclaw": {
-                        "mode": "proxied",
+                        "mode": "gateway-rpc",
                         "model": openclaw["model"],
                         "agent": openclaw["agent"],
-                        "response": remote_response,
+                        "sessionKey": session_key,
+                        "response": remote_exchange,
                     },
                 }
             except ValueError as exc:
@@ -672,6 +736,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "fallbackToLocal": openclaw["fallbackToLocal"],
                 "configRef": "default",
             }
+            session["openclawSessionKey"] = _gateway_session_key(session["id"], openclaw["agent"])
             _append_turn(session, role="user", text=question)
             _append_turn(
                 session,

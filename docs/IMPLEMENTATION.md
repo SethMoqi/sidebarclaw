@@ -33,12 +33,19 @@
 
 ### 2. OpenClaw 适配
 
-当前优先适配官方 `POST /v1/responses`：
+根据当前运行中的 OpenClaw Control UI 和本地 bundle 检查，官方聊天机制是 Gateway WebSocket RPC，而不是单纯的 `/v1/responses` 页面聊天：
 
-- 透传 `model`
-- 使用 `Authorization: Bearer ...`
-- 将 `agent` 写入 `metadata` 和 `instructions`
-- 如果远端失败且允许 fallback，则退回本地 longdoc 检索链路
+- 连接阶段包含 `connect`
+- 聊天相关方法至少包含 `chat.history`
+- 聊天发送至少包含 `chat.send`
+
+当前试验版仍保留基于 HTTP adapter 的实现，主要原因是先把插件工作流和本地 fallback 跑通。现阶段行为是：
+
+- 配置独立保存
+- 聊天和页面注入仍通过本地 adapter HTTP 链路进入 gateway
+- adapter 内部优先调用官方 `openclaw gateway call chat.send/chat.history`
+- 若未显式填写 Token，优先复用 `OPENCLAW_GATEWAY_TOKEN`
+- 如果官方链路失败且允许 fallback，再退回本地 longdoc
 
 ### 3. 安全隔离
 
@@ -61,7 +68,7 @@
 - `sidepanel.html`：对话、注入、会话操作
 - `options.html`：Gateway/OpenClaw 设置和连接验证
 
-这样可以把密钥配置和网页输入视图分开。
+这样可以把密钥配置和网页输入视图分开。侧栏不再承载配置编辑，只保留交流页面。
 
 ### 5. longdoc fallback
 
@@ -85,7 +92,7 @@ fallback 的处理链路包括：
 
 ## 当前限制
 
-- 还没有接真实的 WebSocket `chat.send/chat.inject`
+- 插件前端本身还没有直接持有官方 WebSocket 客户端；目前是通过本地 adapter 代连 `connect/chat.history/chat.send`
 - 还没有向量检索和 rerank
 - 还没有插件侧的归档页和任务模板
 - 还没有针对真实 OpenClaw 返回结构做充分联调

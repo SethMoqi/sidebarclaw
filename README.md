@@ -58,7 +58,9 @@ PYTHONPATH=src python3 -m longdoc.cli inject sample_capture.json --output .longd
 
 - 不负责联网抓取网页
 - 本地 fallback 仍以词法检索为主，不含向量召回和 rerank
-- `OpenClaw` 当前优先走官方 `/v1/responses` 适配，尚未接入 WebSocket `chat.send/chat.inject`
+- 根据当前运行中的 OpenClaw Control UI，官方聊天机制是 Gateway WebSocket RPC，至少包含 `connect`、`chat.history`、`chat.send`
+- 当前试验插件通过本地 adapter HTTP 链路工作，但 adapter 内部已经切到官方 `openclaw gateway call chat.send/chat.history`
+- 若未在设置页显式填写 Token，adapter 会优先复用 `OPENCLAW_GATEWAY_TOKEN`
 
 ## 相关文档
 
