@@ -81,6 +81,8 @@ async function handleMessage(message) {
       return listTabs();
     case "createSession":
       return createSession(message.payload || {});
+    case "resolveActiveSession":
+      return resolveActiveSession();
     case "loadSession":
       return loadSession(message.payload?.sessionId);
     case "refreshSessionRemote":
@@ -97,10 +99,11 @@ async function handleMessage(message) {
 }
 
 async function getGatewaySettings() {
-  const stored = await chrome.storage.local.get(["gatewayBase", "sessionId"]);
+  const stored = await chrome.storage.local.get(["gatewayBase", "sessionId", "lastArchivedSessionId"]);
   return {
     gatewayBase: stored.gatewayBase || DEFAULT_GATEWAY_BASE,
     sessionId: stored.sessionId || "",
+    lastArchivedSessionId: stored.lastArchivedSessionId || "",
   };
 }
 
@@ -171,13 +174,44 @@ async function createSession() {
   return created;
 }
 
+async function resolveActiveSession() {
+  const { gatewayBase, sessionId } = await getGatewaySettings();
+  if (sessionId) {
+    try {
+      const loaded = await loadSession(sessionId);
+      if (!["archived", "pending_archive"].includes(loaded.session?.status || "")) {
+        return loaded;
+      }
+    } catch (_error) {
+      // Fall through to dynamic resolution.
+    }
+  }
+  const latest = await getJson(`${gatewayBase}/sessions/latest`);
+  const candidate = latest.session;
+  if (candidate && !["archived", "pending_archive"].includes(candidate.status || "")) {
+    await chrome.storage.local.set({ sessionId: candidate.id });
+    return { session: candidate, resolved: true };
+  }
+  const created = await createSession();
+  return { session: created.session, created: true };
+}
+
 async function loadSession(sessionId) {
   if (!sessionId) {
     throw new Error("sessionId is required");
   }
   const { gatewayBase } = await getGatewaySettings();
   const loaded = await getJson(`${gatewayBase}/sessions/${sessionId}`);
-  await chrome.storage.local.set({ sessionId });
+  const nextStatus = loaded.session?.status || "";
+  if (nextStatus === "archived" || nextStatus === "pending_archive") {
+    await chrome.storage.local.set({ lastArchivedSessionId: sessionId });
+    const current = await chrome.storage.local.get(["sessionId"]);
+    if (current.sessionId === sessionId) {
+      await chrome.storage.local.remove(["sessionId"]);
+    }
+  } else {
+    await chrome.storage.local.set({ sessionId });
+  }
   return loaded;
 }
 
@@ -187,7 +221,16 @@ async function refreshSessionRemote(sessionId) {
   }
   const { gatewayBase } = await getGatewaySettings();
   const refreshed = await postJson(`${gatewayBase}/sessions/refresh`, { sessionId });
-  await chrome.storage.local.set({ sessionId });
+  const nextStatus = refreshed.session?.status || "";
+  if (nextStatus === "archived" || nextStatus === "pending_archive") {
+    await chrome.storage.local.set({ lastArchivedSessionId: sessionId });
+    const current = await chrome.storage.local.get(["sessionId"]);
+    if (current.sessionId === sessionId) {
+      await chrome.storage.local.remove(["sessionId"]);
+    }
+  } else {
+    await chrome.storage.local.set({ sessionId });
+  }
   return refreshed;
 }
 
@@ -284,11 +327,14 @@ async function finalizeStoredSession(reason) {
     return { skipped: true };
   }
   const policy = await getStoredPolicy();
-  return await postJson(`${gatewayBase}/sessions/finalize`, {
+  const result = await postJson(`${gatewayBase}/sessions/finalize`, {
     sessionId,
     reason,
     policy,
   });
+  await chrome.storage.local.set({ lastArchivedSessionId: sessionId });
+  await chrome.storage.local.remove(["sessionId"]);
+  return result;
 }
 
 async function maybeFinalizeIdleSession() {

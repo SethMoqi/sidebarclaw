@@ -72,6 +72,29 @@ def _session_path(data_dir: Path, session_id: str) -> Path:
     return data_dir / "sessions" / f"{session_id}.json"
 
 
+def _list_sessions(data_dir: Path) -> list[dict]:
+    sessions_dir = data_dir / "sessions"
+    if not sessions_dir.exists():
+        return []
+    sessions: list[dict] = []
+    for path in sessions_dir.glob("*.json"):
+        try:
+            session = _sanitize_session(json.loads(path.read_text(encoding="utf-8")))
+        except Exception:
+            continue
+        sessions.append(session)
+    sessions.sort(key=lambda item: item.get("updatedAt") or item.get("createdAt") or "", reverse=True)
+    return sessions
+
+
+def _resolve_latest_session(data_dir: Path) -> dict | None:
+    sessions = _list_sessions(data_dir)
+    for session in sessions:
+        if session.get("status") not in {"archived", "pending_archive"}:
+            return session
+    return sessions[0] if sessions else None
+
+
 def _openclaw_settings_path(data_dir: Path) -> Path:
     return data_dir / "settings" / "openclaw.json"
 
@@ -974,6 +997,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
             })
         if parsed.path == "/settings/openclaw":
             return self._write_json(200, {"settings": _public_openclaw_settings(_load_openclaw_settings(self.data_dir))})
+        if parsed.path == "/sessions/latest":
+            latest = _resolve_latest_session(self.data_dir)
+            return self._write_json(200, {"session": latest})
         if parsed.path.startswith("/sessions/"):
             session_id = parsed.path.rsplit("/", 1)[-1]
             return self._write_json(200, {"session": _load_session(self.data_dir, session_id)})

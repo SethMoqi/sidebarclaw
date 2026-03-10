@@ -5,6 +5,7 @@
   "description": "Experimental browser sidebar for local OpenClaw via the longdoc gateway.",
   "permissions": [
     "storage",
+    "alarms",
     "tabs",
     "sidePanel",
     "scripting",

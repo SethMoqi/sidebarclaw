@@ -6,6 +6,7 @@ const prompts = [
 
 const state = {
   sessionId: "",
+  sessionStatus: "active",
   selectedTabIds: new Set(),
   availableTabs: [],
   promptSettings: {
@@ -45,6 +46,7 @@ document.getElementById("refreshStatusBtn").addEventListener("click", bootstrap)
 document.getElementById("refreshTabsBtn").addEventListener("click", loadTabs);
 document.getElementById("selectActiveBtn").addEventListener("click", selectActiveTabOnly);
 document.getElementById("selectAllBtn").addEventListener("click", selectAllTabs);
+document.getElementById("clearSelectionBtn").addEventListener("click", clearTabSelection);
 document.getElementById("injectPage").addEventListener("click", injectPage);
 document.getElementById("sendQuestion").addEventListener("click", sendQuestion);
 document.getElementById("modeFullContent").addEventListener("click", () => setCaptureMode("full-content"));
@@ -58,17 +60,16 @@ async function bootstrap() {
   setStatus("idle", "正在同步状态");
   await Promise.all([renderConnectionSummary(), loadTabs(), loadPromptSettings(), loadThemeSettings()]);
 
-  const gateway = await sendRuntimeMessage("getGatewaySettings");
-  state.sessionId = gateway.sessionId || "";
-  if (state.sessionId) {
-    try {
-      const loaded = await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
-      applySession(loaded.session);
+  try {
+    const resolved = await sendRuntimeMessage("resolveActiveSession");
+    state.sessionId = resolved.session?.id || "";
+    if (resolved.session) {
+      applySession(resolved.session);
       startPolling();
       return;
-    } catch (_error) {
-      stopPolling();
     }
+  } catch (_error) {
+    stopPolling();
   }
 
   await createSession();
@@ -185,9 +186,12 @@ async function createSession() {
 }
 
 async function injectPage() {
+  if (state.sessionStatus === "archived" || state.sessionStatus === "pending_archive") {
+    await createSession();
+  }
   if (!state.selectedTabIds.size) {
-    appendMessage("assistant", "先选择至少一个标签页。");
-    return;
+    selectActiveTabOnly();
+    setStatus("warn", "未选标签页，已自动回退到当前标签页");
   }
   setStatus("busy", "正在注入标签页");
   const result = await sendRuntimeMessage("injectCurrentPage", {
@@ -205,6 +209,9 @@ async function injectPage() {
 }
 
 async function sendQuestion() {
+  if (state.sessionStatus === "archived" || state.sessionStatus === "pending_archive") {
+    await createSession();
+  }
   const text = question.value.trim();
   if (!text) {
     return;
@@ -247,6 +254,7 @@ function applySession(session) {
   const turns = session.turns || [];
   state.lastTurnCount = turns.length;
   state.lastTurnSignature = getTurnSignature(turns);
+  state.sessionStatus = session.status || "active";
   sessionLabel.textContent = session.id;
   const openclaw = session.openclaw || {};
   sessionMeta.textContent = `status: ${session.status || "active"} | turns: ${state.lastTurnCount} | model: ${openclaw.model || "openclaw:main"}${openclaw.agent ? ` | agent: ${openclaw.agent}` : ""}`;
@@ -334,6 +342,15 @@ async function refreshSessionNow() {
     setStatus("warn", "当前没有会话可刷新");
     return;
   }
+  if (state.sessionStatus === "archived" || state.sessionStatus === "pending_archive") {
+    const resolved = await sendRuntimeMessage("resolveActiveSession");
+    if (resolved.session) {
+      state.sessionId = resolved.session.id;
+      applySession(resolved.session);
+      setStatus("ok", "已切换到最新活动会话");
+      return;
+    }
+  }
   setStatus("busy", "正在同步远端会话");
   try {
     const refreshed = await sendRuntimeMessage("refreshSessionRemote", { sessionId: state.sessionId });
@@ -372,6 +389,12 @@ function selectActiveTabOnly() {
 function selectAllTabs() {
   state.selectedTabIds = new Set(state.availableTabs.map((tab) => tab.id));
   renderTabs();
+}
+
+function clearTabSelection() {
+  state.selectedTabIds = new Set();
+  renderTabs();
+  setStatus("ok", "已清空标签页选择");
 }
 
 function setStatus(kind, text) {
