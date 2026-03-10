@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "OpenClaw Sidecar",
+  "name": "SidebarClaw",
   "version": "0.1.0",
-  "description": "Experimental browser side panel for local OpenClaw via the longdoc gateway.",
+  "description": "Experimental browser sidebar for local OpenClaw via the longdoc gateway.",
   "permissions": [
     "storage",
     "tabs",
@@ -17,7 +17,7 @@
     "http://*/*"
   ],
   "action": {
-    "default_title": "OpenClaw Sidecar"
+    "default_title": "SidebarClaw"
   },
   "background": {
     "service_worker": "background.js",

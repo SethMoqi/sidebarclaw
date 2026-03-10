@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenClaw Sidecar Settings</title>
+    <title>SidebarClaw Settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
@@ -11,10 +11,31 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Experimental Extension</p>
-          <h1>插件设置</h1>
+          <h1>SidebarClaw 设置</h1>
           <p class="subtitle">将 gateway 地址、OpenClaw 地址和 Bearer Token 与网页输入和会话内容分离存储。</p>
         </div>
       </header>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>界面主题</h2>
+            <p>切换 SidebarClaw 的浅色、暗夜或跟随系统主题。</p>
+          </div>
+          <span id="themeSaved" class="badge muted">未保存</span>
+        </div>
+        <label>
+          主题模式
+          <select id="themeMode">
+            <option value="system">跟随系统</option>
+            <option value="light">浅色</option>
+            <option value="dark">暗夜</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button id="saveTheme" class="ghost">保存主题</button>
+        </div>
+      </section>
 
       <section class="panel">
         <div class="panel-head">

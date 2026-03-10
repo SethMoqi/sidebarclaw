@@ -4,14 +4,20 @@ const DEFAULT_PROMPT_SETTINGS = {
   askPrefix: "请基于当前会话里已注入的网页内容回答。",
   defaultCaptureMode: "full-content",
 };
+const DEFAULT_THEME_SETTINGS = {
+  theme: "system",
+};
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const current = await chrome.storage.local.get(["gatewayBase", "promptSettings"]);
+  const current = await chrome.storage.local.get(["gatewayBase", "promptSettings", "themeSettings"]);
   if (!current.gatewayBase) {
     await chrome.storage.local.set({ gatewayBase: DEFAULT_GATEWAY_BASE });
   }
   if (!current.promptSettings) {
     await chrome.storage.local.set({ promptSettings: DEFAULT_PROMPT_SETTINGS });
+  }
+  if (!current.themeSettings) {
+    await chrome.storage.local.set({ themeSettings: DEFAULT_THEME_SETTINGS });
   }
 });
 
@@ -45,6 +51,10 @@ async function handleMessage(message) {
       return getPromptSettings();
     case "savePromptSettings":
       return savePromptSettings(message.payload);
+    case "getThemeSettings":
+      return getThemeSettings();
+    case "saveThemeSettings":
+      return saveThemeSettings(message.payload);
     case "listTabs":
       return listTabs();
     case "createSession":
@@ -91,6 +101,25 @@ async function savePromptSettings(payload) {
   };
   await chrome.storage.local.set({ promptSettings: next });
   return { promptSettings: next };
+}
+
+async function getThemeSettings() {
+  const stored = await chrome.storage.local.get(["themeSettings"]);
+  return {
+    themeSettings: {
+      ...DEFAULT_THEME_SETTINGS,
+      ...(stored.themeSettings || {}),
+    },
+  };
+}
+
+async function saveThemeSettings(payload) {
+  const next = {
+    ...DEFAULT_THEME_SETTINGS,
+    ...(payload || {}),
+  };
+  await chrome.storage.local.set({ themeSettings: next });
+  return { themeSettings: next };
 }
 
 async function getOpenClawSettings() {

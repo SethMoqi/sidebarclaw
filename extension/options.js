@@ -12,6 +12,8 @@ const sessionInjectPrompt = document.getElementById("sessionInjectPrompt");
 const askPrefix = document.getElementById("askPrefix");
 const defaultCaptureMode = document.getElementById("defaultCaptureMode");
 const promptSaved = document.getElementById("promptSaved");
+const themeMode = document.getElementById("themeMode");
+const themeSaved = document.getElementById("themeSaved");
 const feedbackDialog = document.getElementById("feedbackDialog");
 const feedbackTitle = document.getElementById("feedbackTitle");
 const feedbackBody = document.getElementById("feedbackBody");
@@ -20,15 +22,17 @@ document.getElementById("saveGateway").addEventListener("click", saveGatewaySett
 document.getElementById("saveOpenClaw").addEventListener("click", saveOpenClawSettings);
 document.getElementById("testConnection").addEventListener("click", testOpenClawSettings);
 document.getElementById("savePrompts").addEventListener("click", savePromptSettings);
+document.getElementById("saveTheme").addEventListener("click", saveThemeSettings);
 
 bootstrap();
 
 async function bootstrap() {
   try {
-    const [gateway, settings, prompts] = await Promise.all([
+    const [gateway, settings, prompts, theme] = await Promise.all([
       sendRuntimeMessage("getGatewaySettings"),
       sendRuntimeMessage("getOpenClawSettings"),
       sendRuntimeMessage("getPromptSettings"),
+      sendRuntimeMessage("getThemeSettings"),
     ]);
 
     gatewayBase.value = gateway.gatewayBase;
@@ -37,9 +41,18 @@ async function bootstrap() {
 
     hydrateOpenClawSettings(settings.settings);
     hydratePromptSettings(prompts.promptSettings);
+    hydrateThemeSettings(theme.themeSettings);
   } catch (error) {
     showFeedback("加载失败", `设置页初始化失败：${String(error.message || error)}`);
   }
+}
+
+function hydrateThemeSettings(settings = {}) {
+  const mode = settings.theme || "system";
+  themeMode.value = mode;
+  themeSaved.textContent = mode === "system" ? "跟随系统" : "已保存";
+  themeSaved.className = "badge ok";
+  applyTheme(mode);
 }
 
 function hydrateOpenClawSettings(settings = {}) {
@@ -128,6 +141,16 @@ async function savePromptSettings() {
   }
 }
 
+async function saveThemeSettings() {
+  try {
+    const saved = await sendRuntimeMessage("saveThemeSettings", { theme: themeMode.value });
+    hydrateThemeSettings(saved.themeSettings);
+    showFeedback("主题已保存", `当前主题模式：${describeTheme(themeMode.value)}`);
+  } catch (error) {
+    showFeedback("保存失败", `主题保存失败：${String(error.message || error)}`);
+  }
+}
+
 async function testOpenClawSettings(options = {}) {
   try {
     const result = await sendRuntimeMessage("validateOpenClawSettings", collectOpenClawSettings());
@@ -171,6 +194,23 @@ function showFeedback(title, body) {
     return;
   }
   window.alert(`${title}\n\n${body}`);
+}
+
+function applyTheme(mode) {
+  const resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : mode;
+  document.body.dataset.theme = resolved;
+}
+
+function describeTheme(mode) {
+  if (mode === "dark") {
+    return "暗夜";
+  }
+  if (mode === "light") {
+    return "浅色";
+  }
+  return "跟随系统";
 }
 
 function sendRuntimeMessage(type, payload = {}) {

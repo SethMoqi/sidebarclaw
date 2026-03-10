@@ -1,11 +1,27 @@
 :root {
-  --bg: #f1e8da;
-  --panel: rgba(255, 251, 245, 0.92);
-  --line: rgba(90, 70, 54, 0.16);
-  --text: #1d1712;
-  --muted: #7c6857;
-  --accent: #9f3d2f;
-  --accent-strong: #7f281a;
+  --bg: #edf7ff;
+  --panel: rgba(250, 253, 255, 0.94);
+  --line: rgba(71, 128, 176, 0.18);
+  --text: #10233a;
+  --muted: #5f7895;
+  --accent: #72b7ea;
+  --accent-strong: #4898d3;
+  --ok-bg: rgba(232, 246, 238, 0.96);
+  --warn-bg: rgba(255, 248, 229, 0.96);
+  --error-bg: rgba(255, 237, 238, 0.96);
+}
+
+body[data-theme="dark"] {
+  --bg: #0d1b2a;
+  --panel: rgba(14, 29, 45, 0.88);
+  --line: rgba(116, 176, 228, 0.18);
+  --text: #e8f4ff;
+  --muted: #8fb1cc;
+  --accent: #8bc8f1;
+  --accent-strong: #5daee7;
+  --ok-bg: rgba(24, 62, 43, 0.96);
+  --warn-bg: rgba(74, 59, 18, 0.96);
+  --error-bg: rgba(79, 30, 36, 0.96);
 }
 
 * {
@@ -17,8 +33,9 @@ body {
   color: var(--text);
   font-family: "SF Pro Text", "Segoe UI", sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(214, 157, 98, 0.18), transparent 28%),
-    linear-gradient(160deg, #f8f2ea, #efe2d1);
+    radial-gradient(circle at top left, rgba(120, 188, 236, 0.18), transparent 28%),
+    linear-gradient(160deg, #f4fbff, var(--bg));
+  transition: background 220ms ease, color 220ms ease;
 }
 
 button,
@@ -41,6 +58,7 @@ select {
   border-radius: 22px;
   background: var(--panel);
   padding: 20px;
+  transition: background 220ms ease, border-color 220ms ease, transform 180ms ease;
 }
 
 .eyebrow {
@@ -48,7 +66,7 @@ select {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 12px;
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .hero h1,
@@ -94,8 +112,15 @@ select {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 11px 12px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.9);
   color: var(--text);
+  transition: background 220ms ease, color 220ms ease, border-color 220ms ease, box-shadow 180ms ease;
+}
+
+body[data-theme="dark"] input,
+body[data-theme="dark"] textarea,
+body[data-theme="dark"] select {
+  background: rgba(17, 36, 55, 0.96);
 }
 
 textarea {
@@ -115,6 +140,7 @@ textarea {
 .actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 button {
@@ -124,6 +150,11 @@ button {
   cursor: pointer;
   color: white;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
 }
 
 button.ghost {
@@ -145,7 +176,7 @@ button.ghost {
 
 .badge.ok {
   color: #255a2b;
-  background: rgba(236, 249, 240, 0.96);
+  background: var(--ok-bg);
 }
 
 .validation {
@@ -155,20 +186,20 @@ button.ghost {
 }
 
 .validation.ok {
-  background: rgba(236, 249, 240, 0.96);
+  background: var(--ok-bg);
 }
 
 .validation.warn {
-  background: rgba(255, 246, 229, 0.96);
+  background: var(--warn-bg);
 }
 
 .validation.error {
-  background: rgba(255, 237, 233, 0.96);
+  background: var(--error-bg);
 }
 
 .validation.empty {
   color: var(--muted);
-  background: rgba(255, 250, 244, 0.84);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .mitigations {
@@ -184,7 +215,7 @@ button.ghost {
 }
 
 .feedback-dialog::backdrop {
-  background: rgba(19, 16, 13, 0.45);
+  background: rgba(16, 32, 50, 0.46);
   backdrop-filter: blur(3px);
 }
 
@@ -192,7 +223,7 @@ button.ghost {
   width: min(520px, calc(100vw - 32px));
   border: 1px solid var(--line);
   border-radius: 24px;
-  background: #fffaf4;
+  background: var(--panel);
   padding: 18px;
   display: grid;
   gap: 14px;

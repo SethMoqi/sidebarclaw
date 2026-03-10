@@ -16,6 +16,7 @@ const state = {
   captureMode: "full-content",
   lastTurnCount: 0,
   pollTimer: null,
+  theme: "system",
 };
 
 const statusPulse = document.getElementById("statusPulse");
@@ -46,7 +47,7 @@ renderPromptList();
 
 async function bootstrap() {
   setStatus("idle", "正在同步状态");
-  await Promise.all([renderConnectionSummary(), loadTabs(), loadPromptSettings()]);
+  await Promise.all([renderConnectionSummary(), loadTabs(), loadPromptSettings(), loadThemeSettings()]);
 
   const gateway = await sendRuntimeMessage("getGatewaySettings");
   state.sessionId = gateway.sessionId || "";
@@ -62,6 +63,12 @@ async function bootstrap() {
   }
 
   await createSession();
+}
+
+async function loadThemeSettings() {
+  const result = await sendRuntimeMessage("getThemeSettings");
+  state.theme = result.themeSettings?.theme || "system";
+  applyTheme(state.theme);
 }
 
 async function renderConnectionSummary() {
@@ -319,6 +326,13 @@ function sendRuntimeMessage(type, payload = {}) {
 
 function openSettingsPage() {
   chrome.runtime.openOptionsPage();
+}
+
+function applyTheme(mode) {
+  const resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : mode;
+  document.body.dataset.theme = resolved;
 }
 
 function escapeHtml(value) {
