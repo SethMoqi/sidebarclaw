@@ -1,0 +1,202 @@
+:root {
+  --bg: #f4efe7;
+  --panel: #fffaf4;
+  --line: rgba(90, 70, 54, 0.16);
+  --text: #1d1712;
+  --muted: #7c6857;
+  --accent: #9f3d2f;
+  --accent-strong: #7f281a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "SF Pro Text", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(227, 171, 114, 0.22), transparent 26%),
+    linear-gradient(160deg, #f8f2ea, #efe5d7);
+  color: var(--text);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.topbar,
+.card {
+  background: rgba(255, 251, 245, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.topbar h1,
+.card h2 {
+  margin: 0;
+}
+
+.topbar p,
+.muted,
+label {
+  color: var(--muted);
+}
+
+.card {
+  display: grid;
+  gap: 10px;
+}
+
+.notice {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(246, 239, 229, 0.78);
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--text);
+}
+
+.toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.toggle input {
+  width: auto;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: white;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.validation {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 250, 244, 0.84);
+}
+
+.validation.ok {
+  background: rgba(236, 249, 240, 0.96);
+}
+
+.validation.warn {
+  background: rgba(255, 246, 229, 0.96);
+}
+
+.validation.error {
+  background: rgba(255, 237, 233, 0.96);
+}
+
+.validation.empty {
+  color: var(--muted);
+}
+
+.mitigations {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.prompt-list {
+  display: grid;
+  gap: 8px;
+}
+
+.prompt {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 252, 247, 0.92);
+  cursor: pointer;
+}
+
+.prompt strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.messages {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.message {
+  border-radius: 14px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.message.user {
+  background: #201917;
+  color: #fff8f2;
+}
+
+.message.assistant {
+  background: #fff6ed;
+  border: 1px solid rgba(159, 61, 47, 0.16);
+}

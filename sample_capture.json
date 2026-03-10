@@ -1,0 +1,18 @@
+{
+  "inputId": "inp_1773041074635",
+  "stored": true,
+  "contentStats": {
+    "length": 120683,
+    "extractionMode": "main-content",
+    "paragraphCount": 120
+  },
+  "output": {
+    "role": "assistant",
+    "text": "已接收网页内容\n标题: 胆固醇合成中环状 RNA/miRNA 轴的潜在作用和机制 - PMC\nURL: https://pmc.ncbi.nlm.nih.gov/articles/PMC10266072/",
+    "summary": {
+      "title": "胆固醇合成中环状 RNA/miRNA 轴的潜在作用和机制 - PMC",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10266072/"
+    },
+    "excerpt": "Source: webpage\n\nTitle: 胆固醇合成中环状 RNA/miRNA 轴的潜在作用和机制 - PMC\n\nHeadings:\nAbstract\nMechanism\nTherapeutic Targets\n\nPageContent:\nCholesterol levels are an initiating risk factor for atherosclerosis.\n\nAbstract\nCircRNAs may have longer half-lives and lower immunogenicity than linear RNA agents.\n\nMechanism\nMany studies show that circRNAs regulate cholesterol synthesis by regulating HMGCR, SQLE, HMGCS1, PTEN, DHCR24, SREBP-2, and PMK expression.\n\nTherapeutic Targets\nSuppressing HMGCR, SQLE, and miR-122 with circRNA_ABCA1, circ-PRKCH, circEZH2, circRNA-SCAP, and circFOXO3 is described as a promising direction for drug development."
+  }
+}

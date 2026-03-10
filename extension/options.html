@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenClaw Sidecar Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Experimental Extension</p>
+          <h1>插件设置</h1>
+          <p class="subtitle">将 gateway 地址、OpenClaw 地址和 Bearer Token 与网页输入和会话内容分离存储。</p>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Gateway</h2>
+            <p>扩展只通过本地 gateway 与 OpenClaw 或 longdoc 通信。</p>
+          </div>
+          <span id="gatewaySaved" class="badge muted">未保存</span>
+        </div>
+        <label>
+          Gateway Base URL
+          <input id="gatewayBase" type="url" placeholder="http://127.0.0.1:8787" />
+        </label>
+        <div class="actions">
+          <button id="saveGateway">保存 Gateway</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>OpenClaw</h2>
+            <p>以下设置写入 gateway 的独立配置存储，不会进入页面注入 payload 或会话文件。</p>
+          </div>
+          <span id="openclawSaved" class="badge muted">未保存</span>
+        </div>
+        <label>
+          Base URL
+          <input id="openclawBaseUrl" type="url" placeholder="http://127.0.0.1:9000" />
+        </label>
+        <label>
+          Bearer Token
+          <input id="bearerToken" type="password" placeholder="oc_..." />
+        </label>
+        <label>
+          Model
+          <input id="modelName" type="text" placeholder="openclaw:main" />
+        </label>
+        <label>
+          Agent
+          <input id="agentId" type="text" placeholder="research-agent" />
+        </label>
+        <label class="toggle">
+          <input id="fallbackToLocal" type="checkbox" checked />
+          <span>OpenClaw 失败时回退到本地 longdoc</span>
+        </label>
+        <div class="actions">
+          <button id="testConnection" class="ghost">测试连接</button>
+          <button id="saveOpenClaw">保存 OpenClaw 设置</button>
+        </div>
+        <div id="validationStatus" class="validation empty">尚未校验配置</div>
+        <ul id="mitigationList" class="mitigations"></ul>
+      </section>
+    </main>
+
+    <script src="options.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenClaw Gateway UI</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">OC</div>
+          <div>
+            <h1>OpenClaw</h1>
+            <p>Web context workspace</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>提示词列表</h2>
+            <span class="muted">一键带入</span>
+          </div>
+          <div id="promptList" class="prompt-list"></div>
+        </section>
+
+        <section class="panel compact">
+          <div class="panel-head">
+            <h2>当前索引</h2>
+          </div>
+          <div id="activeDoc" class="doc-card empty">尚未注入文档</div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="hero">
+          <div>
+            <p class="eyebrow">Local Gateway</p>
+            <h2>类似常见 LLM 服务平台的对话工作台</h2>
+          </div>
+          <div class="hero-actions">
+            <button id="newSessionBtn" class="ghost">新对话</button>
+            <button id="healthBtn" class="ghost">检查服务</button>
+            <span id="healthStatus" class="status">未检查</span>
+          </div>
+        </header>
+
+        <section class="session-strip">
+          <div>
+            <span class="muted">当前会话</span>
+            <strong id="sessionLabel">未创建</strong>
+          </div>
+          <div class="muted" id="sessionMeta">注入和提问都会自动写入当前会话</div>
+        </section>
+
+        <section class="chat-panel">
+          <div id="messages" class="messages">
+            <article class="message assistant">
+              <div class="message-meta">assistant</div>
+              <div class="bubble">
+                先在右侧注入网页内容或长文，再从左侧选择提示词，最后发起提问。
+              </div>
+            </article>
+          </div>
+
+          <form id="chatForm" class="composer">
+            <label for="question" class="composer-label">提问</label>
+            <textarea
+              id="question"
+              name="question"
+              rows="4"
+              placeholder="例如：总结这页的核心观点，并指出 miR-122 和 circFOXO3 的关系"
+            ></textarea>
+            <div class="composer-actions">
+              <button type="button" id="clearChat" class="ghost">清空会话</button>
+              <button type="submit">发送</button>
+            </div>
+          </form>
+        </section>
+      </main>
+
+      <aside class="inspector">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>OpenClaw 连接</h2>
+            <span class="muted">agent-aware</span>
+          </div>
+          <form id="connectionForm" class="stack">
+            <label>
+              OpenClaw Base URL
+              <input id="openclawBaseUrl" type="url" placeholder="http://127.0.0.1:9000" />
+            </label>
+            <label>
+              Bearer Token
+              <input id="bearerToken" type="password" placeholder="oc_..." />
+            </label>
+            <label>
+              Model
+              <input id="modelName" type="text" placeholder="openclaw:main" />
+            </label>
+            <label>
+              Agent
+              <input id="agentId" type="text" placeholder="例如：research-agent" />
+            </label>
+            <label class="toggle">
+              <input id="fallbackToLocal" type="checkbox" checked />
+              <span>OpenClaw 失败时回退到本地 longdoc</span>
+            </label>
+            <div class="inline-actions">
+              <button type="button" id="testConnection" class="ghost">测试连接</button>
+              <button type="button" id="saveConnection" class="ghost">保存连接</button>
+            </div>
+          </form>
+          <div id="validationStatus" class="validation-status empty">尚未校验配置</div>
+          <ul id="mitigationList" class="mitigation-list"></ul>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>内容注入</h2>
+            <span class="muted">/inputs/inject</span>
+          </div>
+          <form id="injectForm" class="stack">
+            <label>
+              标题
+              <input id="title" name="title" type="text" placeholder="页面标题" />
+            </label>
+            <label>
+              URL
+              <input id="url" name="url" type="url" placeholder="https://example.com/article" />
+            </label>
+            <label>
+              附加指令
+              <input id="instruction" name="instruction" type="text" placeholder="总结后支持后续检索" />
+            </label>
+            <label>
+              正文内容
+              <textarea
+                id="content"
+                name="content"
+                rows="14"
+                placeholder="粘贴网页正文、论文内容或抓取后的 main-content"
+              ></textarea>
+            </label>
+            <div class="inline-actions">
+              <button type="button" id="loadDemo" class="ghost">载入示例</button>
+              <button type="submit">注入内容</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>证据视图</h2>
+            <span class="muted">结构化返回</span>
+          </div>
+          <pre id="evidence" class="evidence">等待提问结果...</pre>
+        </section>
+      </aside>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

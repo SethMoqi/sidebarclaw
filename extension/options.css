@@ -1,0 +1,169 @@
+:root {
+  --bg: #f1e8da;
+  --panel: rgba(255, 251, 245, 0.92);
+  --line: rgba(90, 70, 54, 0.16);
+  --text: #1d1712;
+  --muted: #7c6857;
+  --accent: #9f3d2f;
+  --accent-strong: #7f281a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: "SF Pro Text", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(214, 157, 98, 0.18), transparent 28%),
+    linear-gradient(160deg, #f8f2ea, #efe2d1);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.shell {
+  width: min(840px, calc(100vw - 32px));
+  margin: 32px auto;
+  display: grid;
+  gap: 16px;
+}
+
+.hero,
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--panel);
+  padding: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.hero h1,
+.panel h2,
+.panel p {
+  margin: 0;
+}
+
+.subtitle {
+  margin-top: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.panel-head p,
+label,
+.mitigations {
+  color: var(--muted);
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #fff;
+  color: var(--text);
+}
+
+.toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.toggle input {
+  width: auto;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 14px;
+  padding: 10px 14px;
+  cursor: pointer;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+}
+
+button.ghost {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.badge.muted {
+  color: var(--muted);
+}
+
+.badge.ok {
+  color: #255a2b;
+  background: rgba(236, 249, 240, 0.96);
+}
+
+.validation {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+.validation.ok {
+  background: rgba(236, 249, 240, 0.96);
+}
+
+.validation.warn {
+  background: rgba(255, 246, 229, 0.96);
+}
+
+.validation.error {
+  background: rgba(255, 237, 233, 0.96);
+}
+
+.validation.empty {
+  color: var(--muted);
+  background: rgba(255, 250, 244, 0.84);
+}
+
+.mitigations {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.5;
+}

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenClaw Sidecar</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <h1>OpenClaw Sidecar</h1>
+          <p>Experimental extension for local OpenClaw</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="openSettingsBtn" class="ghost">插件设置</button>
+          <button id="newSessionBtn" class="ghost">新对话</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>连接设置</h2>
+          <span id="gatewayHint" class="muted"></span>
+        </div>
+        <div class="notice">
+          敏感连接信息保存在扩展设置与 gateway 独立存储中，不会写入当前页面输入或会话记录。
+        </div>
+        <label>
+          Gateway Base URL
+          <input id="gatewayBase" type="url" placeholder="http://127.0.0.1:8787" />
+        </label>
+        <div class="actions">
+          <button id="saveGateway" class="ghost">保存 Gateway</button>
+          <button id="reloadSettings" class="ghost">刷新设置</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>OpenClaw 设置</h2>
+          <span class="muted">物理隔离存储</span>
+        </div>
+        <label>
+          Base URL
+          <input id="openclawBaseUrl" type="url" placeholder="http://127.0.0.1:9000" />
+        </label>
+        <label>
+          Bearer Token
+          <input id="bearerToken" type="password" placeholder="oc_..." />
+        </label>
+        <label>
+          Model
+          <input id="modelName" type="text" placeholder="openclaw:main" />
+        </label>
+        <label>
+          Agent
+          <input id="agentId" type="text" placeholder="research-agent" />
+        </label>
+        <label class="toggle">
+          <input id="fallbackToLocal" type="checkbox" checked />
+          <span>OpenClaw 失败时回退到本地 longdoc</span>
+        </label>
+        <div class="actions">
+          <button id="testConnection" class="ghost">测试连接</button>
+          <button id="saveOpenClaw">保存 OpenClaw 设置</button>
+        </div>
+        <div id="validationStatus" class="validation empty">尚未校验配置</div>
+        <ul id="mitigationList" class="mitigations"></ul>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>当前会话</h2>
+          <span id="sessionLabel" class="muted">未创建</span>
+        </div>
+        <div id="sessionMeta" class="muted">注入和提问都会进入当前会话</div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>提示词模板</h2>
+        </div>
+        <div id="promptList" class="prompt-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>注入当前页面</h2>
+        </div>
+        <label>
+          附加指令
+          <input id="instruction" type="text" placeholder="总结后支持后续检索" />
+        </label>
+        <div class="actions">
+          <button id="injectPage">注入当前页</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>对话</h2>
+        </div>
+        <div id="messages" class="messages"></div>
+        <label>
+          提问
+          <textarea id="question" rows="5" placeholder="例如：总结这页，并指出最关键的证据段落"></textarea>
+        </label>
+        <div class="actions">
+          <button id="sendQuestion">发送问题</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="sidepanel.js" type="module"></script>
+  </body>
+</html>
