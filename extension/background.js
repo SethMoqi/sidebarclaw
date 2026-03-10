@@ -193,7 +193,7 @@ async function askCurrentSession(payload) {
   if (!activeSessionId) {
     throw new Error("No active session. Inject a page first or create a new session.");
   }
-  const response = await postJson(`${gatewayBase}/ask`, {
+  const response = await postJson(`${gatewayBase}/ask/async`, {
     sessionId: activeSessionId,
     question: payload.question || "",
     ...(normalizeOpenClawPayload(payload.openclaw) ? { openclaw: normalizeOpenClawPayload(payload.openclaw) } : {}),

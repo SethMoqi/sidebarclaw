@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 import subprocess
+import threading
 import time
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +18,9 @@ from .chunking import build_chunks
 from .indexing import LongDocIndex, load_index, save_input_record
 from .ingest import ingest_document, ingest_text
 from .qa import answer_question_json, build_injected_output, summarize_document
+
+
+SESSION_LOCK = threading.RLock()
 
 
 def _slug(value: str) -> str:
@@ -164,6 +168,27 @@ def _append_turn(session: dict, *, role: str, text: str, extra: dict | None = No
     if extra:
         turn.update(extra)
     session.setdefault("turns", []).append(turn)
+
+
+def _mutate_session(data_dir: Path, session_id: str, mutator) -> dict:
+    with SESSION_LOCK:
+        session = _load_session(data_dir, session_id)
+        mutator(session)
+        _save_session(data_dir, session)
+        return session
+
+
+def _update_turn(session: dict, turn_id: str, *, text: str | None = None, extra: dict | None = None) -> None:
+    for turn in session.get("turns", []):
+        if turn.get("id") != turn_id:
+            continue
+        if text is not None:
+            turn["text"] = text
+        if extra:
+            turn.update(extra)
+        turn["updatedAt"] = datetime.now(UTC).isoformat()
+        return
+    raise FileNotFoundError(f"turn not found: {turn_id}")
 
 
 def _sanitize_turn_text(text: str) -> str:
@@ -370,6 +395,124 @@ def _send_gateway_message_and_wait(*, openclaw: dict, session_key: str, message:
     }
 
 
+def _resolve_index_dir(data_dir: Path, body: dict) -> Path:
+    index_ref = body.get("indexRef", {})
+    if "path" in index_ref:
+        return Path(index_ref["path"])
+    if "docId" in index_ref:
+        return data_dir / "indices" / str(index_ref["docId"])
+    doc_id = body.get("docId")
+    if doc_id:
+        return data_dir / "indices" / str(doc_id)
+    session_id = body.get("sessionId")
+    if session_id:
+        session = _load_session(data_dir, str(session_id))
+        active = session.get("activeIndexRef")
+        if active:
+            return _resolve_index_dir(data_dir, {"indexRef": active})
+    raise ValueError("indexRef.path or indexRef.docId is required")
+
+
+def _answer_from_runtime(*, data_dir: Path, body: dict, openclaw: dict, session_id: str | None) -> dict:
+    if openclaw["baseUrl"]:
+        session_key = _gateway_session_key(str(session_id or "browser-sidebar"), openclaw["agent"])
+        if session_id:
+            session = _load_session(data_dir, str(session_id))
+            session_key = str(session.get("openclawSessionKey") or "") or session_key
+        try:
+            remote_exchange = _send_gateway_message_and_wait(
+                openclaw=openclaw,
+                session_key=session_key,
+                message=_build_question_message(str(body.get("question") or "")),
+                idempotency_key=f"ask-{secrets.token_hex(8)}",
+            )
+            remote_message = remote_exchange.get("message") or {}
+            answer_text = _extract_gateway_message_text(remote_message) if remote_message else ""
+            if not answer_text:
+                answer_text = "OpenClaw 已接收问题，但在轮询窗口内未返回最终 assistant 消息。"
+            return {
+                "question": str(body.get("question") or ""),
+                "answerText": answer_text,
+                "openclaw": {
+                    "mode": "gateway-rpc",
+                    "model": openclaw["model"],
+                    "agent": openclaw["agent"],
+                    "sessionKey": session_key,
+                    "response": remote_exchange,
+                },
+            }
+        except ValueError as exc:
+            if not openclaw["fallbackToLocal"]:
+                raise
+            index = load_index(str(_resolve_index_dir(data_dir, body)))
+            limit = int(body.get("limit") or 5)
+            response = answer_question_json(index, str(body.get("question") or ""), limit=limit)
+            response["openclaw"] = {
+                "mode": "fallback",
+                "model": openclaw["model"],
+                "agent": openclaw["agent"],
+                "error": str(exc),
+            }
+            return response
+    index = load_index(str(_resolve_index_dir(data_dir, body)))
+    limit = int(body.get("limit") or 5)
+    return answer_question_json(index, str(body.get("question") or ""), limit=limit)
+
+
+def _run_async_ask(*, data_dir: Path, session_id: str, question: str, openclaw: dict, body: dict, task_id: str, pending_turn_id: str) -> None:
+    try:
+        response = _answer_from_runtime(
+            data_dir=data_dir,
+            body={**body, "sessionId": session_id, "question": question},
+            openclaw=openclaw,
+            session_id=session_id,
+        )
+        response["sessionId"] = session_id
+        _mutate_session(
+            data_dir,
+            session_id,
+            lambda session: _update_turn(
+                session,
+                pending_turn_id,
+                text=json.dumps(response, ensure_ascii=False, indent=2),
+                extra={
+                    "status": "completed",
+                    "taskId": task_id,
+                    "pending": False,
+                    "question": question,
+                    "evidence": response.get("evidence", []),
+                },
+            ),
+        )
+    except Exception as exc:
+        error_payload = {
+            "question": question,
+            "error": str(exc),
+            "openclaw": {
+                "mode": "failed",
+                "model": openclaw["model"],
+                "agent": openclaw["agent"],
+                "error": str(exc),
+            },
+            "sessionId": session_id,
+        }
+        _mutate_session(
+            data_dir,
+            session_id,
+            lambda session: _update_turn(
+                session,
+                pending_turn_id,
+                text=json.dumps(error_payload, ensure_ascii=False, indent=2),
+                extra={
+                    "status": "error",
+                    "taskId": task_id,
+                    "pending": False,
+                    "question": question,
+                },
+            ),
+        )
+
+
 def _validate_openclaw_config(config: dict) -> dict:
     normalized = _normalize_openclaw_config(config)
     mitigations: list[str] = []
@@ -493,6 +636,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 return self._handle_openclaw_validate(body)
             if parsed.path == "/ask":
                 return self._handle_ask(body)
+            if parsed.path == "/ask/async":
+                return self._handle_ask_async(body)
             if parsed.path == "/summarize/page":
                 return self._handle_summarize(body)
             if parsed.path == "/archive/create":
@@ -645,23 +790,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
             payload["sessionId"] = session["id"]
         self._write_json(200, payload)
 
-    def _resolve_index_dir(self, body: dict) -> Path:
-        index_ref = body.get("indexRef", {})
-        if "path" in index_ref:
-            return Path(index_ref["path"])
-        if "docId" in index_ref:
-            return self.data_dir / "indices" / str(index_ref["docId"])
-        doc_id = body.get("docId")
-        if doc_id:
-            return self.data_dir / "indices" / str(doc_id)
-        session_id = body.get("sessionId")
-        if session_id:
-            session = _load_session(self.data_dir, str(session_id))
-            active = session.get("activeIndexRef")
-            if active:
-                return self._resolve_index_dir({"indexRef": active})
-        raise ValueError("indexRef.path or indexRef.docId is required")
-
     def _handle_create_session(self) -> None:
         session = _create_session(self.data_dir)
         self._write_json(200, {"sessionId": session["id"], "session": session})
@@ -684,50 +812,12 @@ class GatewayHandler(BaseHTTPRequestHandler):
         session_id = body.get("sessionId")
         session = _load_session(self.data_dir, str(session_id)) if session_id else None
         openclaw = _resolve_openclaw_runtime_config(self.data_dir, body.get("openclaw") or (session or {}).get("openclaw"))
-        response: dict
-        if openclaw["baseUrl"]:
-            session_key = (
-                str((session or {}).get("openclawSessionKey") or "")
-                or _gateway_session_key(str(session_id or "browser-sidebar"), openclaw["agent"])
-            )
-            try:
-                remote_exchange = _send_gateway_message_and_wait(
-                    openclaw=openclaw,
-                    session_key=session_key,
-                    message=_build_question_message(question),
-                    idempotency_key=f"ask-{secrets.token_hex(8)}",
-                )
-                remote_message = remote_exchange.get("message") or {}
-                answer_text = _extract_gateway_message_text(remote_message) if remote_message else ""
-                if not answer_text:
-                    answer_text = "OpenClaw 已接收问题，但在轮询窗口内未返回最终 assistant 消息。"
-                response = {
-                    "question": question,
-                    "answerText": answer_text,
-                    "openclaw": {
-                        "mode": "gateway-rpc",
-                        "model": openclaw["model"],
-                        "agent": openclaw["agent"],
-                        "sessionKey": session_key,
-                        "response": remote_exchange,
-                    },
-                }
-            except ValueError as exc:
-                if not openclaw["fallbackToLocal"]:
-                    raise
-                index = load_index(str(self._resolve_index_dir(body)))
-                limit = int(body.get("limit") or 5)
-                response = answer_question_json(index, question, limit=limit)
-                response["openclaw"] = {
-                    "mode": "fallback",
-                    "model": openclaw["model"],
-                    "agent": openclaw["agent"],
-                    "error": str(exc),
-                }
-        else:
-            index = load_index(str(self._resolve_index_dir(body)))
-            limit = int(body.get("limit") or 5)
-            response = answer_question_json(index, question, limit=limit)
+        response = _answer_from_runtime(
+            data_dir=self.data_dir,
+            body={**body, "question": question},
+            openclaw=openclaw,
+            session_id=str(session_id) if session_id else None,
+        )
         if session_id:
             assert session is not None
             session["openclaw"] = {
@@ -748,9 +838,63 @@ class GatewayHandler(BaseHTTPRequestHandler):
             response["sessionId"] = session["id"]
         self._write_json(200, response)
 
+    def _handle_ask_async(self, body: dict) -> None:
+        question = str(body.get("question") or "").strip()
+        if not question:
+            raise ValueError("question is required")
+        session_id = str(body.get("sessionId") or "").strip()
+        if not session_id:
+            raise ValueError("sessionId is required for async ask")
+        with SESSION_LOCK:
+            session = _load_session(self.data_dir, session_id)
+            openclaw = _resolve_openclaw_runtime_config(self.data_dir, body.get("openclaw") or session.get("openclaw"))
+            task_id = f"task_{secrets.token_hex(6)}"
+            pending_turn_id = f"turn_{secrets.token_hex(5)}"
+            session["openclaw"] = {
+                "model": openclaw["model"],
+                "agent": openclaw["agent"],
+                "fallbackToLocal": openclaw["fallbackToLocal"],
+                "configRef": "default",
+            }
+            session["openclawSessionKey"] = _gateway_session_key(session["id"], openclaw["agent"])
+            _append_turn(session, role="user", text=question, extra={"taskId": task_id})
+            session.setdefault("turns", []).append({
+                "id": pending_turn_id,
+                "role": "assistant",
+                "text": "正在等待 OpenClaw 响应...",
+                "createdAt": datetime.now(UTC).isoformat(),
+                "updatedAt": datetime.now(UTC).isoformat(),
+                "status": "pending",
+                "taskId": task_id,
+                "question": question,
+                "pending": True,
+            })
+            _save_session(self.data_dir, session)
+        worker = threading.Thread(
+            target=_run_async_ask,
+            kwargs={
+                "data_dir": self.data_dir,
+                "session_id": session_id,
+                "question": question,
+                "openclaw": openclaw,
+                "body": body,
+                "task_id": task_id,
+                "pending_turn_id": pending_turn_id,
+            },
+            daemon=True,
+        )
+        worker.start()
+        self._write_json(202, {
+            "accepted": True,
+            "taskId": task_id,
+            "pendingTurnId": pending_turn_id,
+            "sessionId": session_id,
+            "status": "pending",
+        })
+
     def _handle_summarize(self, body: dict) -> None:
         if "indexRef" in body or "docId" in body:
-            index = load_index(str(self._resolve_index_dir(body)))
+            index = load_index(str(_resolve_index_dir(self.data_dir, body)))
         elif "input" in body or "page" in body or "content" in body:
             doc, _, _, _, _ = _build_document_from_payload(body)
             index = LongDocIndex(doc, build_chunks(doc))

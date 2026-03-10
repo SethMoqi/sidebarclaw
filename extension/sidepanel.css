@@ -129,6 +129,11 @@ textarea {
   box-shadow: 0 0 0 0 rgba(209, 165, 68, 0.42);
 }
 
+.status-pulse.busy {
+  background: #79c2f0;
+  box-shadow: 0 0 0 0 rgba(121, 194, 240, 0.5);
+}
+
 .status-pulse.error {
   background: #cf6260;
   box-shadow: 0 0 0 0 rgba(207, 98, 96, 0.42);
@@ -151,6 +156,60 @@ textarea {
   padding-right: 4px;
 }
 
+.messages,
+.status-strip,
+.prompt-row,
+.tab-list,
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79, 159, 217, 0.38) transparent;
+}
+
+body[data-theme="dark"] .messages,
+body[data-theme="dark"] .status-strip,
+body[data-theme="dark"] .prompt-row,
+body[data-theme="dark"] .tab-list,
+body[data-theme="dark"] textarea {
+  scrollbar-color: rgba(142, 205, 245, 0.34) transparent;
+}
+
+.messages::-webkit-scrollbar,
+.status-strip::-webkit-scrollbar,
+.prompt-row::-webkit-scrollbar,
+.tab-list::-webkit-scrollbar,
+textarea::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.messages::-webkit-scrollbar-track,
+.status-strip::-webkit-scrollbar-track,
+.prompt-row::-webkit-scrollbar-track,
+.tab-list::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages::-webkit-scrollbar-thumb,
+.status-strip::-webkit-scrollbar-thumb,
+.prompt-row::-webkit-scrollbar-thumb,
+.tab-list::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background: rgba(79, 159, 217, 0.34);
+  background-clip: padding-box;
+}
+
+body[data-theme="dark"] .messages::-webkit-scrollbar-thumb,
+body[data-theme="dark"] .status-strip::-webkit-scrollbar-thumb,
+body[data-theme="dark"] .prompt-row::-webkit-scrollbar-thumb,
+body[data-theme="dark"] .tab-list::-webkit-scrollbar-thumb,
+body[data-theme="dark"] textarea::-webkit-scrollbar-thumb {
+  background: rgba(142, 205, 245, 0.3);
+  background-clip: padding-box;
+}
+
 .message {
   border-radius: 18px;
   padding: 12px 14px;
@@ -169,6 +228,11 @@ textarea {
 .message.assistant {
   background: rgba(255, 255, 255, 0.84);
   border: 1px solid rgba(124, 192, 239, 0.18);
+}
+
+.message.pending {
+  border-style: dashed;
+  opacity: 0.84;
 }
 
 body[data-theme="dark"] .message.assistant {

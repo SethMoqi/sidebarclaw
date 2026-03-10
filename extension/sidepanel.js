@@ -15,8 +15,10 @@ const state = {
   },
   captureMode: "full-content",
   lastTurnCount: 0,
+  lastTurnSignature: "",
   pollTimer: null,
   theme: "system",
+  isWaitingForResponse: false,
 };
 
 const statusPulse = document.getElementById("statusPulse");
@@ -182,8 +184,9 @@ async function injectPage() {
   if (result.sessionId) {
     const loaded = await sendRuntimeMessage("loadSession", { sessionId: result.sessionId });
     applySession(loaded.session);
+  } else {
+    appendMessage("assistant", result.output?.text || "注入完成。");
   }
-  appendMessage("assistant", result.output?.text || "注入完成。");
   setStatus("ok", "注入完成");
 }
 
@@ -192,17 +195,28 @@ async function sendQuestion() {
   if (!text) {
     return;
   }
-  appendMessage("user", text);
   question.value = "";
+  state.isWaitingForResponse = true;
   setStatus("busy", "等待 OpenClaw 响应");
   const finalQuestion = state.promptSettings.askPrefix
     ? `${state.promptSettings.askPrefix}\n\n用户问题：${text}`
     : text;
-  const result = await sendRuntimeMessage("askCurrentSession", {
-    question: finalQuestion,
-  });
-  appendMessage("assistant", buildAnswer(result));
-  setStatus("ok", "已收到响应");
+  try {
+    const result = await sendRuntimeMessage("askCurrentSession", {
+      question: finalQuestion,
+    });
+    if (result.sessionId) {
+      state.sessionId = result.sessionId;
+      const loaded = await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
+      applySession(loaded.session);
+    }
+    triggerBurstRefresh();
+    setStatus("busy", "问题已提交，等待响应");
+  } catch (error) {
+    state.isWaitingForResponse = false;
+    setStatus("error", "响应失败");
+    appendMessage("assistant", `请求失败：${error.message}`);
+  }
 }
 
 function buildAnswer(result) {
@@ -216,11 +230,13 @@ function buildAnswer(result) {
 }
 
 function applySession(session) {
-  state.lastTurnCount = session.turns?.length || 0;
+  const turns = session.turns || [];
+  state.lastTurnCount = turns.length;
+  state.lastTurnSignature = getTurnSignature(turns);
   sessionLabel.textContent = session.id;
   const openclaw = session.openclaw || {};
   sessionMeta.textContent = `turns: ${state.lastTurnCount} | model: ${openclaw.model || "openclaw:main"}${openclaw.agent ? ` | agent: ${openclaw.agent}` : ""}`;
-  restoreMessages(session.turns || []);
+  restoreMessages(turns);
 }
 
 function restoreMessages(turns) {
@@ -231,7 +247,7 @@ function restoreMessages(turns) {
   }
   for (const turn of turns) {
     const role = turn.role === "system" ? "assistant" : turn.role;
-    appendMessage(role, normalizeTurnText(turn));
+    appendMessage(role, normalizeTurnText(turn), { status: turn.status || "" });
   }
 }
 
@@ -251,9 +267,9 @@ function normalizeTurnText(turn) {
   return raw;
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, text, options = {}) {
   const node = document.createElement("div");
-  node.className = `message ${role}`;
+  node.className = `message ${role}${options.status ? ` ${options.status}` : ""}`;
   node.textContent = text;
   messages.appendChild(node);
   messages.scrollTop = messages.scrollHeight;
@@ -261,7 +277,7 @@ function appendMessage(role, text) {
 
 function startPolling() {
   stopPolling();
-  state.pollTimer = window.setInterval(refreshSessionSilently, 2000);
+  state.pollTimer = window.setInterval(refreshSessionSilently, 1200);
 }
 
 function stopPolling() {
@@ -278,13 +294,29 @@ async function refreshSessionSilently() {
   try {
     const loaded = await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
     const nextTurns = loaded.session.turns?.length || 0;
-    if (nextTurns !== state.lastTurnCount) {
+    const nextSignature = getTurnSignature(loaded.session.turns || []);
+    if (nextTurns !== state.lastTurnCount || nextSignature !== state.lastTurnSignature) {
       applySession(loaded.session);
-      setStatus("ok", "会话已更新");
+      const latestRole = loaded.session.turns?.[loaded.session.turns.length - 1]?.role || "";
+      const latestStatus = loaded.session.turns?.[loaded.session.turns.length - 1]?.status || "";
+      if (state.isWaitingForResponse && latestRole === "assistant" && latestStatus !== "pending") {
+        state.isWaitingForResponse = false;
+        setStatus("ok", "已收到响应");
+      } else if (state.isWaitingForResponse) {
+        setStatus("busy", "OpenClaw 正在处理中");
+      } else {
+        setStatus("ok", "会话已更新");
+      }
     }
   } catch (_error) {
     setStatus("warn", "会话刷新失败");
   }
+}
+
+function triggerBurstRefresh() {
+  window.setTimeout(() => refreshSessionSilently(), 300);
+  window.setTimeout(() => refreshSessionSilently(), 900);
+  window.setTimeout(() => refreshSessionSilently(), 1800);
 }
 
 function setCaptureMode(mode) {
@@ -333,6 +365,14 @@ function applyTheme(mode) {
     ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
     : mode;
   document.body.dataset.theme = resolved;
+}
+
+function getTurnSignature(turns) {
+  if (!turns.length) {
+    return "";
+  }
+  const lastTurn = turns[turns.length - 1];
+  return `${turns.length}:${lastTurn.role || ""}:${lastTurn.status || ""}:${normalizeTurnText(lastTurn)}`;
 }
 
 function escapeHtml(value) {
