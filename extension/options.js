@@ -8,8 +8,13 @@ const fallbackToLocal = document.getElementById("fallbackToLocal");
 const validationStatus = document.getElementById("validationStatus");
 const mitigationList = document.getElementById("mitigationList");
 const openclawSaved = document.getElementById("openclawSaved");
+const sessionOpeningPrompt = document.getElementById("sessionOpeningPrompt");
 const sessionInjectPrompt = document.getElementById("sessionInjectPrompt");
 const askPrefix = document.getElementById("askPrefix");
+const sessionClosurePrompt = document.getElementById("sessionClosurePrompt");
+const protectionMode = document.getElementById("protectionMode");
+const autoCloseSummary = document.getElementById("autoCloseSummary");
+const idleTimeoutMinutes = document.getElementById("idleTimeoutMinutes");
 const defaultCaptureMode = document.getElementById("defaultCaptureMode");
 const promptSaved = document.getElementById("promptSaved");
 const themeMode = document.getElementById("themeMode");
@@ -67,11 +72,16 @@ function hydrateOpenClawSettings(settings = {}) {
 }
 
 function hydratePromptSettings(settings = {}) {
+  sessionOpeningPrompt.value = settings.sessionOpeningPrompt || "";
   sessionInjectPrompt.value = settings.sessionInjectPrompt || "";
   askPrefix.value = settings.askPrefix || "";
+  sessionClosurePrompt.value = settings.sessionClosurePrompt || "";
+  protectionMode.value = settings.protectionMode || "strict";
+  autoCloseSummary.checked = Boolean(settings.autoCloseSummary ?? true);
+  idleTimeoutMinutes.value = String(settings.idleTimeoutMinutes || 10);
   defaultCaptureMode.value = settings.defaultCaptureMode || "full-content";
-  promptSaved.textContent = settings.sessionInjectPrompt || settings.askPrefix ? "已保存" : "未保存";
-  promptSaved.className = `badge ${settings.sessionInjectPrompt || settings.askPrefix ? "ok" : "muted"}`;
+  promptSaved.textContent = settings.sessionInjectPrompt || settings.askPrefix || settings.sessionOpeningPrompt ? "已保存" : "未保存";
+  promptSaved.className = `badge ${settings.sessionInjectPrompt || settings.askPrefix || settings.sessionOpeningPrompt ? "ok" : "muted"}`;
 }
 
 function collectOpenClawSettings() {
@@ -86,8 +96,13 @@ function collectOpenClawSettings() {
 
 function collectPromptSettings() {
   return {
+    sessionOpeningPrompt: sessionOpeningPrompt.value.trim(),
     sessionInjectPrompt: sessionInjectPrompt.value.trim(),
     askPrefix: askPrefix.value.trim(),
+    sessionClosurePrompt: sessionClosurePrompt.value.trim(),
+    protectionMode: protectionMode.value,
+    autoCloseSummary: autoCloseSummary.checked,
+    idleTimeoutMinutes: Number(idleTimeoutMinutes.value || 10),
     defaultCaptureMode: defaultCaptureMode.value,
   };
 }
@@ -133,6 +148,8 @@ async function savePromptSettings() {
       "提示词配置已保存",
       [
         "这些配置会在 session 打开后直接作用于侧栏。",
+        `Prompt 注入防护：${describeProtection(protectionMode.value)}`,
+        `自动关闭整理：${autoCloseSummary.checked ? "开启" : "关闭"}`,
         `默认注入模式：${saved.promptSettings.defaultCaptureMode === "url-reference" ? "只注入 URL 引用" : "抓取正文"}`,
       ].join("\n")
     );
@@ -211,6 +228,16 @@ function describeTheme(mode) {
     return "浅色";
   }
   return "跟随系统";
+}
+
+function describeProtection(mode) {
+  if (mode === "off") {
+    return "关闭";
+  }
+  if (mode === "balanced") {
+    return "平衡";
+  }
+  return "严格";
 }
 
 function sendRuntimeMessage(type, payload = {}) {

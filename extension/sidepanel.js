@@ -9,8 +9,13 @@ const state = {
   selectedTabIds: new Set(),
   availableTabs: [],
   promptSettings: {
+    sessionOpeningPrompt: "",
     sessionInjectPrompt: "",
     askPrefix: "",
+    sessionClosurePrompt: "",
+    protectionMode: "strict",
+    autoCloseSummary: true,
+    idleTimeoutMinutes: 10,
     defaultCaptureMode: "full-content",
   },
   captureMode: "full-content",
@@ -34,6 +39,7 @@ const messages = document.getElementById("messages");
 const tabList = document.getElementById("tabList");
 
 document.getElementById("newSessionBtn").addEventListener("click", createSession);
+document.getElementById("refreshSessionBtn").addEventListener("click", refreshSessionNow);
 document.getElementById("openSettingsBtn").addEventListener("click", openSettingsPage);
 document.getElementById("refreshStatusBtn").addEventListener("click", bootstrap);
 document.getElementById("refreshTabsBtn").addEventListener("click", loadTabs);
@@ -43,6 +49,7 @@ document.getElementById("injectPage").addEventListener("click", injectPage);
 document.getElementById("sendQuestion").addEventListener("click", sendQuestion);
 document.getElementById("modeFullContent").addEventListener("click", () => setCaptureMode("full-content"));
 document.getElementById("modeUrlReference").addEventListener("click", () => setCaptureMode("url-reference"));
+window.addEventListener("pagehide", handlePageHide);
 
 bootstrap();
 renderPromptList();
@@ -161,6 +168,13 @@ function renderPromptList() {
 }
 
 async function createSession() {
+  if (state.sessionId && state.promptSettings.autoCloseSummary) {
+    try {
+      await sendRuntimeMessage("finalizeCurrentSession", { reason: "new_session_created" });
+    } catch (_error) {
+      // Ignore finalize errors during session rollover.
+    }
+  }
   const created = await sendRuntimeMessage("createSession");
   state.sessionId = created.session.id;
   applySession(created.session);
@@ -235,7 +249,7 @@ function applySession(session) {
   state.lastTurnSignature = getTurnSignature(turns);
   sessionLabel.textContent = session.id;
   const openclaw = session.openclaw || {};
-  sessionMeta.textContent = `turns: ${state.lastTurnCount} | model: ${openclaw.model || "openclaw:main"}${openclaw.agent ? ` | agent: ${openclaw.agent}` : ""}`;
+  sessionMeta.textContent = `status: ${session.status || "active"} | turns: ${state.lastTurnCount} | model: ${openclaw.model || "openclaw:main"}${openclaw.agent ? ` | agent: ${openclaw.agent}` : ""}`;
   restoreMessages(turns);
 }
 
@@ -292,7 +306,9 @@ async function refreshSessionSilently() {
     return;
   }
   try {
-    const loaded = await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
+    const loaded = state.isWaitingForResponse
+      ? await sendRuntimeMessage("refreshSessionRemote", { sessionId: state.sessionId })
+      : await sendRuntimeMessage("loadSession", { sessionId: state.sessionId });
     const nextTurns = loaded.session.turns?.length || 0;
     const nextSignature = getTurnSignature(loaded.session.turns || []);
     if (nextTurns !== state.lastTurnCount || nextSignature !== state.lastTurnSignature) {
@@ -310,6 +326,29 @@ async function refreshSessionSilently() {
     }
   } catch (_error) {
     setStatus("warn", "会话刷新失败");
+  }
+}
+
+async function refreshSessionNow() {
+  if (!state.sessionId) {
+    setStatus("warn", "当前没有会话可刷新");
+    return;
+  }
+  setStatus("busy", "正在同步远端会话");
+  try {
+    const refreshed = await sendRuntimeMessage("refreshSessionRemote", { sessionId: state.sessionId });
+    if (refreshed.session) {
+      applySession(refreshed.session);
+    }
+    const latestStatus = refreshed.session?.turns?.[refreshed.session.turns.length - 1]?.status || "";
+    if (latestStatus === "pending") {
+      setStatus("busy", "OpenClaw 仍在处理中");
+    } else {
+      state.isWaitingForResponse = false;
+      setStatus("ok", "会话已手动刷新");
+    }
+  } catch (error) {
+    setStatus("error", `刷新失败：${error.message}`);
   }
 }
 
@@ -358,6 +397,16 @@ function sendRuntimeMessage(type, payload = {}) {
 
 function openSettingsPage() {
   chrome.runtime.openOptionsPage();
+}
+
+function handlePageHide() {
+  if (!state.sessionId || !state.promptSettings.autoCloseSummary) {
+    return;
+  }
+  chrome.runtime.sendMessage({
+    type: "finalizeCurrentSession",
+    payload: { reason: "sidepanel_pagehide" },
+  });
 }
 
 function applyTheme(mode) {
