@@ -1,79 +1,128 @@
-# longdoc-mvp
+# SidebarClaw
 
-一个面向本地 `OpenClaw` 的长文工作台，提供本地 gateway、网页侧栏插件和长文检索 fallback。
+SidebarClaw is a ready-to-run Chromium sidebar extension for sending web pages to a local OpenClaw session.
 
-## 功能
+It includes:
 
-- 连接本地 `OpenClaw`
-- 指定 `model` 和 `agent`
-- 通过独立设置页保存 `OpenClaw Base URL` 与 `Bearer Token`
-- 将当前网页注入到会话中并继续多轮提问
-- 支持选择多个打开的标签页一起注入
-- 支持 `抓取正文` 与 `只注入 URL 引用` 两种注入模式
-- 支持配置默认注入提示词和默认提问前缀
-- 当 `OpenClaw` 不可用时，回退到本地 longdoc 检索链路
-- 支持本地文档或网页抓取 JSON 的入库、切块、检索和证据输出
+- a Chromium extension in `extension/`
+- a local adapter gateway in `src/longdoc/gateway.py`
+- an optional local long-document fallback when OpenClaw is unavailable
 
-## 组成
+## What It Does
 
-- 本地 gateway：`src/longdoc/gateway.py`
-- Web 工作台：`web/`
-- Chromium 试验插件：`extension/`
-- 本地 longdoc CLI：`src/longdoc/cli.py`
+SidebarClaw lets you:
 
-## 快速开始
+- connect the extension to your own local OpenClaw gateway
+- configure your own gateway URL, token, model, and agent
+- inject the current tab or multiple open tabs into a session
+- continue chatting against the injected page content
+- keep API credentials separated from page content and session records
+- archive or auto-close sessions with a structured summary
+- apply prompt-injection protection to untrusted page content
 
-先启动本地 gateway：
+## Requirements
 
-```bash
-PYTHONPATH=src python3 -m longdoc.gateway --port 8787 --data-dir .gateway_data
-```
+- Python 3.11 or newer
+- Chromium, Chrome, or Edge
+- a reachable OpenClaw gateway if you want live OpenClaw responses
 
-如果系统默认 `python3` 低于 3.11，改用启动脚本：
+## Quick Start
+
+### 1. Start the local adapter
+
+From the project root:
 
 ```bash
 scripts/start_gateway.sh --port 8787 --data-dir .gateway_data
 ```
 
-然后访问：
+If the command succeeds, the adapter will listen on:
 
 ```text
-http://127.0.0.1:8787/
+http://127.0.0.1:8787
 ```
 
-## 插件测试步骤
+### 2. Load the extension
 
-1. 启动 gateway：`PYTHONPATH=src python3 -m longdoc.gateway --port 8787 --data-dir .gateway_data`
-2. 打开 `chrome://extensions` 或 `edge://extensions`
-3. 开启开发者模式
-4. 选择“加载已解压的扩展程序”
-5. 选择目录：`/Volumes/ACSIS/openclaw/.codex/worktrees/bb38/codex-workspace/extension`
-6. 打开扩展详情页中的“扩展程序选项”
-7. 保存 `Gateway Base URL`
-8. 保存 `OpenClaw Base URL`、`Bearer Token`、`Model`、`Agent`
-9. 点击“测试连接”
-10. 在设置页保存默认注入提示词、默认提问前缀和默认注入模式
-11. 打开侧栏，选择一个或多个标签页并注入
-12. 在侧栏继续提问
+1. Open `chrome://extensions` or `edge://extensions`
+2. Enable Developer Mode
+3. Click `Load unpacked`
+4. Select the `extension/` folder from this repository
 
-## CLI 示例
+### 3. Open the settings page
+
+1. Open the extension details page
+2. Click `Extension options`
+3. Fill in:
+   - `Local Adapter URL`
+   - `OpenClaw Gateway URL`
+   - `Gateway Token` if needed
+   - `Model`
+   - `Agent` if you want a fixed workflow
+4. Click `Test Connection`
+5. Save the settings
+
+### 4. Use the sidebar
+
+1. Open any web page
+2. Open the SidebarClaw side panel
+3. Optionally choose one or more tabs
+4. Click `Inject Selected Tabs`
+5. Ask follow-up questions in the chat box
+
+If no tab is selected, SidebarClaw automatically falls back to the current active tab.
+
+## Session Behavior
+
+- SidebarClaw dynamically resolves the latest usable session when the sidebar opens
+- closed or archived sessions are not reused as the active session
+- if a session becomes archived, SidebarClaw switches to a fresh or still-active session automatically
+- sessions can auto-close with a structured summary after inactivity or when the sidebar closes
+
+## Security Behavior
+
+- OpenClaw credentials are stored separately from page content and session content
+- injected page content is wrapped as untrusted data
+- prompt-injection protection can be configured in the settings page
+- page content must not override system instructions, plugin policy, or credential handling
+
+## Packaging the Extension
+
+To build a distributable zip:
 
 ```bash
-PYTHONPATH=src python3 -m longdoc.cli ingest sample_article.md --output .longdoc_index
-PYTHONPATH=src python3 -m longdoc.cli ask "miR-122 和 circFOXO3 的关系" --index .longdoc_index
-PYTHONPATH=src python3 -m longdoc.cli summarize --index .longdoc_index
-PYTHONPATH=src python3 -m longdoc.cli inject sample_capture.json --output .longdoc_index_json
+scripts/package_extension.sh
 ```
 
-## 当前限制
+The packaged extension will be written to:
 
-- 不负责联网抓取网页
-- 本地 fallback 仍以词法检索为主，不含向量召回和 rerank
-- 根据当前运行中的 OpenClaw Control UI，官方聊天机制是 Gateway WebSocket RPC，至少包含 `connect`、`chat.history`、`chat.send`
-- 当前试验插件通过本地 adapter HTTP 链路工作，但 adapter 内部已经切到官方 `openclaw gateway call chat.send/chat.history`
-- 若未在设置页显式填写 Token，adapter 会优先复用 `OPENCLAW_GATEWAY_TOKEN`
+```text
+dist/sidebarclaw-extension.zip
+```
 
-## 相关文档
+## Repository Layout
 
-- 需求说明：[/Volumes/ACSIS/openclaw/.codex/worktrees/bb38/codex-workspace/docs/REQUIREMENTS.md](/Volumes/ACSIS/openclaw/.codex/worktrees/bb38/codex-workspace/docs/REQUIREMENTS.md)
-- 实现说明与需求演进：[/Volumes/ACSIS/openclaw/.codex/worktrees/bb38/codex-workspace/docs/IMPLEMENTATION.md](/Volumes/ACSIS/openclaw/.codex/worktrees/bb38/codex-workspace/docs/IMPLEMENTATION.md)
+- `extension/` browser extension
+- `src/longdoc/` local adapter gateway and fallback logic
+- `scripts/start_gateway.sh` adapter launcher
+- `scripts/package_extension.sh` extension packager
+
+## Troubleshooting
+
+### The extension cannot connect
+
+- make sure the local adapter is running on `http://127.0.0.1:8787`
+- reload the extension after code changes
+- open the extension options page and run `Test Connection`
+
+### The sidebar opens an archived session
+
+Reload the extension once. SidebarClaw will resolve the latest active session dynamically and stop reusing archived sessions.
+
+### Service worker registration failed
+
+Reload the unpacked extension after pulling the latest files.
+
+## License
+
+This project is released under the MIT License. See [LICENSE](/Volumes/ACSIS/openclaw/.codex/worktrees/bb38/codex-workspace/LICENSE).

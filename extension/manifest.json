@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SidebarClaw",
   "version": "0.1.0",
-  "description": "Experimental browser sidebar for local OpenClaw via the longdoc gateway.",
+  "description": "Browser sidebar for local OpenClaw sessions through the SidebarClaw adapter.",
   "permissions": [
     "storage",
     "alarms",

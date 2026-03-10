@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .gateway_data/
 .longdoc_index*/
+dist/

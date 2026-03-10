@@ -1,7 +1,7 @@
 const prompts = [
-  { title: "快速总结", body: "总结这页的核心观点、结论和最值得保留的 3 个信息点。" },
-  { title: "证据提取", body: "只基于当前页面证据回答，并列出最相关的原文片段。" },
-  { title: "结构化输出", body: "请将这页整理成适合知识库归档的结构化摘要。" },
+  { title: "Quick Summary", body: "Summarize the core ideas, the main conclusion, and the three most useful takeaways from this page." },
+  { title: "Evidence Only", body: "Answer only from the injected page evidence and list the most relevant supporting passages." },
+  { title: "Structured Notes", body: "Turn this page into a structured note that can be archived in a knowledge base." },
 ];
 
 const state = {
@@ -57,7 +57,7 @@ bootstrap();
 renderPromptList();
 
 async function bootstrap() {
-  setStatus("idle", "正在同步状态");
+  setStatus("idle", "Syncing status");
   await Promise.all([renderConnectionSummary(), loadTabs(), loadPromptSettings(), loadThemeSettings()]);
 
   try {
@@ -88,11 +88,11 @@ async function renderConnectionSummary() {
   ]);
   const settings = openclaw.settings || {};
   const configured = Boolean(settings.baseUrl);
-  connectionStatus.textContent = configured ? `已连接 ${settings.agent || settings.model || "OpenClaw"}` : "仅本地 fallback";
+  connectionStatus.textContent = configured ? `Connected to ${settings.agent || settings.model || "OpenClaw"}` : "Local fallback only";
   setStatus(configured ? "ok" : "warn", connectionStatus.textContent);
   sessionMeta.textContent = configured
-    ? `Gateway 已配置 | model: ${settings.model || "openclaw:main"}${settings.agent ? ` | agent: ${settings.agent}` : ""}`
-    : `Gateway 已配置到 ${gateway.gatewayBase}，当前 OpenClaw 未配置`;
+    ? `Adapter configured | model: ${settings.model || "openclaw:main"}${settings.agent ? ` | agent: ${settings.agent}` : ""}`
+    : `Adapter configured at ${gateway.gatewayBase}, OpenClaw not configured`;
 }
 
 async function loadPromptSettings() {
@@ -109,7 +109,7 @@ async function loadPromptSettings() {
 async function loadTabs() {
   const result = await sendRuntimeMessage("listTabs");
   state.availableTabs = result.tabs || [];
-  tabSummary.textContent = `${state.availableTabs.length} 个标签页`;
+  tabSummary.textContent = `${state.availableTabs.length} tabs`;
   if (!state.selectedTabIds.size) {
     for (const tab of state.availableTabs) {
       if (tab.active) {
@@ -151,7 +151,7 @@ function renderTabs() {
 
 function updateTabSelectionSummary() {
   const count = state.selectedTabIds.size;
-  selectedTabsLabel.textContent = count ? `已选 ${count} 个标签页` : "未选择";
+  selectedTabsLabel.textContent = count ? `${count} tabs selected` : "None selected";
 }
 
 function renderPromptList() {
@@ -180,7 +180,7 @@ async function createSession() {
   state.sessionId = created.session.id;
   applySession(created.session);
   messages.innerHTML = "";
-  appendMessage("assistant", "已创建新会话。默认注入提示词已就绪，可以直接注入所选标签页。");
+  appendMessage("assistant", "A new session is ready. You can inject the selected tabs now.");
   instruction.value = state.promptSettings.sessionInjectPrompt || "";
   startPolling();
 }
@@ -191,9 +191,9 @@ async function injectPage() {
   }
   if (!state.selectedTabIds.size) {
     selectActiveTabOnly();
-    setStatus("warn", "未选标签页，已自动回退到当前标签页");
+    setStatus("warn", "No tabs selected. Falling back to the active tab.");
   }
-  setStatus("busy", "正在注入标签页");
+  setStatus("busy", "Injecting tabs");
   const result = await sendRuntimeMessage("injectCurrentPage", {
     instruction: instruction.value.trim(),
     tabIds: [...state.selectedTabIds],
@@ -203,9 +203,9 @@ async function injectPage() {
     const loaded = await sendRuntimeMessage("loadSession", { sessionId: result.sessionId });
     applySession(loaded.session);
   } else {
-    appendMessage("assistant", result.output?.text || "注入完成。");
+    appendMessage("assistant", result.output?.text || "Injection completed.");
   }
-  setStatus("ok", "注入完成");
+  setStatus("ok", "Injection completed");
 }
 
 async function sendQuestion() {
@@ -218,9 +218,9 @@ async function sendQuestion() {
   }
   question.value = "";
   state.isWaitingForResponse = true;
-  setStatus("busy", "等待 OpenClaw 响应");
+  setStatus("busy", "Waiting for OpenClaw");
   const finalQuestion = state.promptSettings.askPrefix
-    ? `${state.promptSettings.askPrefix}\n\n用户问题：${text}`
+    ? `${state.promptSettings.askPrefix}\n\nUser question: ${text}`
     : text;
   try {
     const result = await sendRuntimeMessage("askCurrentSession", {
@@ -232,11 +232,11 @@ async function sendQuestion() {
       applySession(loaded.session);
     }
     triggerBurstRefresh();
-    setStatus("busy", "问题已提交，等待响应");
+    setStatus("busy", "Question submitted");
   } catch (error) {
     state.isWaitingForResponse = false;
-    setStatus("error", "响应失败");
-    appendMessage("assistant", `请求失败：${error.message}`);
+    setStatus("error", "Request failed");
+    appendMessage("assistant", `Request failed: ${error.message}`);
   }
 }
 
@@ -264,7 +264,7 @@ function applySession(session) {
 function restoreMessages(turns) {
   messages.innerHTML = "";
   if (!turns.length) {
-    appendMessage("assistant", "会话已恢复。先注入所选标签页，或直接提问。");
+    appendMessage("assistant", "Session restored. Inject selected tabs or ask a question.");
     return;
   }
   for (const turn of turns) {
@@ -325,21 +325,21 @@ async function refreshSessionSilently() {
       const latestStatus = loaded.session.turns?.[loaded.session.turns.length - 1]?.status || "";
       if (state.isWaitingForResponse && latestRole === "assistant" && latestStatus !== "pending") {
         state.isWaitingForResponse = false;
-        setStatus("ok", "已收到响应");
+        setStatus("ok", "Response received");
       } else if (state.isWaitingForResponse) {
-        setStatus("busy", "OpenClaw 正在处理中");
+        setStatus("busy", "OpenClaw is still working");
       } else {
-        setStatus("ok", "会话已更新");
+        setStatus("ok", "Session updated");
       }
     }
   } catch (_error) {
-    setStatus("warn", "会话刷新失败");
+    setStatus("warn", "Could not refresh the session");
   }
 }
 
 async function refreshSessionNow() {
   if (!state.sessionId) {
-    setStatus("warn", "当前没有会话可刷新");
+    setStatus("warn", "No session is available to refresh");
     return;
   }
   if (state.sessionStatus === "archived" || state.sessionStatus === "pending_archive") {
@@ -347,11 +347,11 @@ async function refreshSessionNow() {
     if (resolved.session) {
       state.sessionId = resolved.session.id;
       applySession(resolved.session);
-      setStatus("ok", "已切换到最新活动会话");
+      setStatus("ok", "Switched to the latest active session");
       return;
     }
   }
-  setStatus("busy", "正在同步远端会话");
+  setStatus("busy", "Refreshing the remote session");
   try {
     const refreshed = await sendRuntimeMessage("refreshSessionRemote", { sessionId: state.sessionId });
     if (refreshed.session) {
@@ -359,13 +359,13 @@ async function refreshSessionNow() {
     }
     const latestStatus = refreshed.session?.turns?.[refreshed.session.turns.length - 1]?.status || "";
     if (latestStatus === "pending") {
-      setStatus("busy", "OpenClaw 仍在处理中");
+      setStatus("busy", "OpenClaw is still working");
     } else {
       state.isWaitingForResponse = false;
-      setStatus("ok", "会话已手动刷新");
+      setStatus("ok", "Session refreshed");
     }
   } catch (error) {
-    setStatus("error", `刷新失败：${error.message}`);
+    setStatus("error", `Refresh failed: ${error.message}`);
   }
 }
 
@@ -394,7 +394,7 @@ function selectAllTabs() {
 function clearTabSelection() {
   state.selectedTabIds = new Set();
   renderTabs();
-  setStatus("ok", "已清空标签页选择");
+  setStatus("ok", "Tab selection cleared");
 }
 
 function setStatus(kind, text) {

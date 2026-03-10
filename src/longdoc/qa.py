@@ -11,10 +11,10 @@ def summarize_document(index: LongDocIndex, max_sections: int = 8) -> str:
         section_map.setdefault(chunk.section_title, []).append(chunk.text.replace("\n", " "))
 
     lines = [
-        f"文档: {index.document.title}",
-        f"来源: {index.document.source}",
+        f"Document: {index.document.title}",
+        f"Source: {index.document.source}",
         "",
-        "摘要:",
+        "Summary:",
     ]
     for section_title, texts in list(section_map.items())[:max_sections]:
         joined = " ".join(texts)
@@ -39,7 +39,7 @@ def summarize_for_injection(document: Document) -> dict:
     summary_parts: list[str] = []
     for chunk in chunks[:2]:
         summary_parts.append(chunk.text.replace("\n", " ")[:240].strip())
-    summary = " ".join(part for part in summary_parts if part).strip() or "未提取到有效正文。"
+    summary = " ".join(part for part in summary_parts if part).strip() or "No usable page text was extracted."
 
     return {
         "title": document.title,
@@ -54,18 +54,18 @@ def summarize_for_injection(document: Document) -> dict:
 def build_injected_output(document: Document, content: str, instruction: str = "") -> dict:
     summary = summarize_for_injection(document)
     lines = [
-        "已接收网页内容",
-        f"标题: {document.title}",
-        f"采集长度: {len(content)} 字符",
+        "Page content received",
+        f"Title: {document.title}",
+        f"Captured length: {len(content)} characters",
     ]
     if document.source:
         lines.append(f"URL: {document.source}")
     if instruction:
-        lines.append(f"附加指令: {instruction}")
-    lines.append(f"摘要: {summary['summary']}")
+        lines.append(f"Instruction: {instruction}")
+    lines.append(f"Summary: {summary['summary']}")
     if summary["keyPoints"]:
-        lines.append(f"关键点: {' | '.join(summary['keyPoints'])}")
-    lines.append(f"正文预览:\n{content[:1200]}")
+        lines.append(f"Key points: {' | '.join(summary['keyPoints'])}")
+    lines.append(f"Excerpt:\n{content[:1200]}")
     return {
         "role": "assistant",
         "text": "\n".join(lines),
@@ -99,13 +99,13 @@ def answer_question_json(index: LongDocIndex, question: str, limit: int = 5) -> 
 def answer_question(index: LongDocIndex, question: str, limit: int = 5) -> str:
     results = index.search(question, limit=limit)
     if not results:
-        return "未检索到相关证据。建议缩小问题范围，或先检查文档是否完成切块和入库。"
+        return "No relevant evidence was found. Try a narrower question or make sure the document was ingested successfully."
 
     lines = [
-        f"文档: {index.document.title}",
-        f"问题: {question}",
+        f"Document: {index.document.title}",
+        f"Question: {question}",
         "",
-        "结论:",
+        "Answer:",
     ]
 
     for result in results[:3]:
@@ -116,7 +116,7 @@ def answer_question(index: LongDocIndex, question: str, limit: int = 5) -> str:
             f"(paragraph {result.chunk.start_paragraph}-{result.chunk.end_paragraph}, score={result.score:.2f})"
         )
 
-    lines.extend(["", "引用:"])
+    lines.extend(["", "References:"])
     for result in results:
         lines.append(
             f"- {result.chunk.chunk_id} | {result.chunk.section_title} | "

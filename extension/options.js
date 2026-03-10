@@ -41,21 +41,21 @@ async function bootstrap() {
     ]);
 
     gatewayBase.value = gateway.gatewayBase;
-    gatewaySaved.textContent = gateway.gatewayBase ? "已保存" : "未保存";
+    gatewaySaved.textContent = gateway.gatewayBase ? "Saved" : "Not saved";
     gatewaySaved.className = `badge ${gateway.gatewayBase ? "ok" : "muted"}`;
 
     hydrateOpenClawSettings(settings.settings);
     hydratePromptSettings(prompts.promptSettings);
     hydrateThemeSettings(theme.themeSettings);
   } catch (error) {
-    showFeedback("加载失败", `设置页初始化失败：${String(error.message || error)}`);
+    showFeedback("Load Failed", `Could not initialize the settings page: ${String(error.message || error)}`);
   }
 }
 
 function hydrateThemeSettings(settings = {}) {
   const mode = settings.theme || "system";
   themeMode.value = mode;
-  themeSaved.textContent = mode === "system" ? "跟随系统" : "已保存";
+  themeSaved.textContent = mode === "system" ? "System" : "Saved";
   themeSaved.className = "badge ok";
   applyTheme(mode);
 }
@@ -63,11 +63,11 @@ function hydrateThemeSettings(settings = {}) {
 function hydrateOpenClawSettings(settings = {}) {
   openclawBaseUrl.value = settings.baseUrl || "";
   bearerToken.value = "";
-  bearerToken.placeholder = settings.hasBearerToken ? "已保存，留空表示不修改" : "留空时优先使用 OPENCLAW_GATEWAY_TOKEN";
+  bearerToken.placeholder = settings.hasBearerToken ? "Saved. Leave blank to keep the current token." : "Leave blank to use OPENCLAW_GATEWAY_TOKEN";
   modelName.value = settings.model || "openclaw:main";
   agentId.value = settings.agent || "";
   fallbackToLocal.checked = Boolean(settings.fallbackToLocal ?? true);
-  openclawSaved.textContent = settings.baseUrl ? "已保存" : "未保存";
+  openclawSaved.textContent = settings.baseUrl ? "Saved" : "Not saved";
   openclawSaved.className = `badge ${settings.baseUrl ? "ok" : "muted"}`;
 }
 
@@ -80,7 +80,7 @@ function hydratePromptSettings(settings = {}) {
   autoCloseSummary.checked = Boolean(settings.autoCloseSummary ?? true);
   idleTimeoutMinutes.value = String(settings.idleTimeoutMinutes || 10);
   defaultCaptureMode.value = settings.defaultCaptureMode || "full-content";
-  promptSaved.textContent = settings.sessionInjectPrompt || settings.askPrefix || settings.sessionOpeningPrompt ? "已保存" : "未保存";
+  promptSaved.textContent = settings.sessionInjectPrompt || settings.askPrefix || settings.sessionOpeningPrompt ? "Saved" : "Not saved";
   promptSaved.className = `badge ${settings.sessionInjectPrompt || settings.askPrefix || settings.sessionOpeningPrompt ? "ok" : "muted"}`;
 }
 
@@ -113,11 +113,11 @@ async function saveGatewaySettings() {
       gatewayBase: gatewayBase.value.trim(),
     });
     gatewayBase.value = saved.gatewayBase;
-    gatewaySaved.textContent = "已保存";
+    gatewaySaved.textContent = "Saved";
     gatewaySaved.className = "badge ok";
-    showFeedback("Gateway 已保存", `当前 Gateway Base URL：\n${saved.gatewayBase}`);
+    showFeedback("Adapter Saved", `Current adapter URL:\n${saved.gatewayBase}`);
   } catch (error) {
-    showFeedback("保存失败", `Gateway 配置保存失败：${String(error.message || error)}`);
+    showFeedback("Save Failed", `Could not save the adapter URL: ${String(error.message || error)}`);
   }
 }
 
@@ -126,17 +126,17 @@ async function saveOpenClawSettings() {
     const saved = await sendRuntimeMessage("saveOpenClawSettings", collectOpenClawSettings());
     hydrateOpenClawSettings(saved.settings);
     showFeedback(
-      "OpenClaw 设置已保存",
+      "OpenClaw Settings Saved",
       [
         `Model: ${saved.settings.model || "openclaw:main"}`,
-        `Agent: ${saved.settings.agent || "未指定"}`,
-        `Token: ${saved.settings.hasBearerToken ? "已保存" : "未保存"}`,
-        `Fallback: ${saved.settings.fallbackToLocal ? "开启" : "关闭"}`,
+        `Agent: ${saved.settings.agent || "Not set"}`,
+        `Token: ${saved.settings.hasBearerToken ? "Stored" : "Not stored"}`,
+        `Fallback: ${saved.settings.fallbackToLocal ? "Enabled" : "Disabled"}`,
       ].join("\n")
     );
     await testOpenClawSettings({ silentSuccess: true });
   } catch (error) {
-    showFeedback("保存失败", `OpenClaw 配置保存失败：${String(error.message || error)}`);
+    showFeedback("Save Failed", `Could not save OpenClaw settings: ${String(error.message || error)}`);
   }
 }
 
@@ -145,16 +145,16 @@ async function savePromptSettings() {
     const saved = await sendRuntimeMessage("savePromptSettings", collectPromptSettings());
     hydratePromptSettings(saved.promptSettings);
     showFeedback(
-      "提示词配置已保存",
+      "Prompt Policy Saved",
       [
-        "这些配置会在 session 打开后直接作用于侧栏。",
-        `Prompt 注入防护：${describeProtection(protectionMode.value)}`,
-        `自动关闭整理：${autoCloseSummary.checked ? "开启" : "关闭"}`,
-        `默认注入模式：${saved.promptSettings.defaultCaptureMode === "url-reference" ? "只注入 URL 引用" : "抓取正文"}`,
+        "These values are applied when a new session is opened.",
+        `Prompt-injection protection: ${describeProtection(protectionMode.value)}`,
+        `Auto-close summary: ${autoCloseSummary.checked ? "Enabled" : "Disabled"}`,
+        `Default injection mode: ${saved.promptSettings.defaultCaptureMode === "url-reference" ? "URLs Only" : "Capture Text"}`,
       ].join("\n")
     );
   } catch (error) {
-    showFeedback("保存失败", `提示词配置保存失败：${String(error.message || error)}`);
+    showFeedback("Save Failed", `Could not save prompt policy: ${String(error.message || error)}`);
   }
 }
 
@@ -162,9 +162,9 @@ async function saveThemeSettings() {
   try {
     const saved = await sendRuntimeMessage("saveThemeSettings", { theme: themeMode.value });
     hydrateThemeSettings(saved.themeSettings);
-    showFeedback("主题已保存", `当前主题模式：${describeTheme(themeMode.value)}`);
+    showFeedback("Theme Saved", `Current theme: ${describeTheme(themeMode.value)}`);
   } catch (error) {
-    showFeedback("保存失败", `主题保存失败：${String(error.message || error)}`);
+    showFeedback("Save Failed", `Could not save the theme: ${String(error.message || error)}`);
   }
 }
 
@@ -174,9 +174,9 @@ async function testOpenClawSettings(options = {}) {
     renderValidation(result);
     if (!options.silentSuccess) {
       showFeedback(
-        "连接测试结果",
+        "Connection Test Result",
         [
-          result.message || "未返回校验结果",
+          result.message || "No validation result returned.",
           "",
           ...(result.mitigations || []).map((item, index) => `${index + 1}. ${item}`),
         ].join("\n")
@@ -185,16 +185,16 @@ async function testOpenClawSettings(options = {}) {
   } catch (error) {
     renderValidation({
       status: "error",
-      message: `校验失败：${String(error.message || error)}`,
+      message: `Validation failed: ${String(error.message || error)}`,
       mitigations: [],
     });
-    showFeedback("连接测试失败", `无法完成连接测试：${String(error.message || error)}`);
+    showFeedback("Connection Test Failed", `Could not complete the connection test: ${String(error.message || error)}`);
   }
 }
 
 function renderValidation(result) {
   validationStatus.className = `validation ${result.status || "warn"}`;
-  validationStatus.textContent = result.message || "未返回校验结果";
+  validationStatus.textContent = result.message || "No validation result returned.";
   mitigationList.innerHTML = "";
   for (const item of result.mitigations || []) {
     const li = document.createElement("li");
@@ -222,22 +222,22 @@ function applyTheme(mode) {
 
 function describeTheme(mode) {
   if (mode === "dark") {
-    return "暗夜";
+    return "Dark";
   }
   if (mode === "light") {
-    return "浅色";
+    return "Light";
   }
-  return "跟随系统";
+  return "System";
 }
 
 function describeProtection(mode) {
   if (mode === "off") {
-    return "关闭";
+    return "Off";
   }
   if (mode === "balanced") {
-    return "平衡";
+    return "Balanced";
   }
-  return "严格";
+  return "Strict";
 }
 
 function sendRuntimeMessage(type, payload = {}) {

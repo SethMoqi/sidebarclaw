@@ -1,7 +1,7 @@
 [project]
-name = "longdoc-mvp"
+name = "sidebarclaw"
 version = "0.1.0"
-description = "Minimal long-document processing and QA pipeline"
+description = "Local adapter and browser extension for OpenClaw-assisted web sessions"
 requires-python = ">=3.11"
 
 [build-system]

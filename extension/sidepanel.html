@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,22 +13,22 @@
           <span id="statusPulse" class="status-pulse idle" aria-hidden="true"></span>
           <div>
             <h1>SidebarClaw</h1>
-            <p id="sessionMeta">未连接到会话</p>
+            <p id="sessionMeta">Not connected</p>
           </div>
         </div>
         <div class="topbar-actions">
-          <button id="refreshSessionBtn" class="ghost">手动刷新</button>
-          <button id="openSettingsBtn" class="ghost">设置</button>
-          <button id="newSessionBtn" class="ghost">新会话</button>
+          <button id="refreshSessionBtn" class="ghost">Refresh</button>
+          <button id="openSettingsBtn" class="ghost">Settings</button>
+          <button id="newSessionBtn" class="ghost">New Session</button>
         </div>
       </header>
 
       <section class="status-strip">
         <button id="refreshStatusBtn" class="status-chip ghost" type="button">
-          <span id="connectionStatus">未检查</span>
+          <span id="connectionStatus">Not checked</span>
         </button>
-        <div id="sessionLabel" class="status-chip">未创建</div>
-        <div id="tabSummary" class="status-chip muted">0 个标签页</div>
+        <div id="sessionLabel" class="status-chip">No session</div>
+        <div id="tabSummary" class="status-chip muted">0 tabs</div>
       </section>
 
       <main class="chat-shell">
@@ -40,39 +40,39 @@
           <div id="promptList" class="prompt-list"></div>
         </div>
         <details class="tools-panel">
-          <summary>来源与注入</summary>
+          <summary>Sources and Injection</summary>
           <div class="tools-grid">
-            <div class="mode-switch" role="radiogroup" aria-label="注入模式">
-              <button id="modeFullContent" class="mode-chip active" type="button">抓取正文</button>
-              <button id="modeUrlReference" class="mode-chip" type="button">只注入 URL</button>
+            <div class="mode-switch" role="radiogroup" aria-label="Injection mode">
+              <button id="modeFullContent" class="mode-chip active" type="button">Capture Text</button>
+              <button id="modeUrlReference" class="mode-chip" type="button">URLs Only</button>
             </div>
             <div class="tools-head">
               <div>
-                <strong>标签页</strong>
-                <span id="selectedTabsLabel" class="muted">未选择</span>
+                <strong>Tabs</strong>
+                <span id="selectedTabsLabel" class="muted">None selected</span>
               </div>
               <div class="mini-actions">
-                <button id="refreshTabsBtn" class="ghost" type="button">刷新标签页</button>
-                <button id="selectActiveBtn" class="ghost" type="button">仅当前</button>
-                <button id="selectAllBtn" class="ghost" type="button">全选</button>
-                <button id="clearSelectionBtn" class="ghost" type="button">全不选</button>
+                <button id="refreshTabsBtn" class="ghost" type="button">Refresh Tabs</button>
+                <button id="selectActiveBtn" class="ghost" type="button">Current Tab</button>
+                <button id="selectAllBtn" class="ghost" type="button">Select All</button>
+                <button id="clearSelectionBtn" class="ghost" type="button">Clear All</button>
               </div>
             </div>
             <div id="tabList" class="tab-list"></div>
             <label>
-              注入提示词
-              <textarea id="instruction" rows="3" placeholder="总结后支持后续检索，并保留最关键的证据段落。"></textarea>
+              Injection Prompt
+              <textarea id="instruction" rows="3" placeholder="Store the page for follow-up retrieval and preserve the strongest evidence."></textarea>
             </label>
             <div class="actions">
-              <button id="injectPage" type="button">注入所选标签页</button>
+              <button id="injectPage" type="button">Inject Selected Tabs</button>
             </div>
           </div>
         </details>
         <div class="composer">
-          <label class="sr-only" for="question">提问</label>
-          <textarea id="question" rows="4" placeholder="围绕已注入网页继续提问"></textarea>
+          <label class="sr-only" for="question">Question</label>
+          <textarea id="question" rows="4" placeholder="Ask a follow-up question about the injected page"></textarea>
           <div class="actions">
-            <button id="sendQuestion" type="button">发送</button>
+            <button id="sendQuestion" type="button">Send</button>
           </div>
         </div>
       </section>
